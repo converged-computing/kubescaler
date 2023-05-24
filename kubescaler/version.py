@@ -26,7 +26,7 @@ AWS_REQUIRES = (("boto3", {"min_version": None}),)
 
 # Prefer discovery clients - more control
 GOOGLE_CLOUD_REQUIRES = (
-#    ("google-auth", {"min_version": None}),
+    #    ("google-auth", {"min_version": None}),
     ("google-cloud-container", {"min_version": None}),
 )
 

@@ -5,10 +5,12 @@
 
 from kubescaler.utils import write_json
 
+
 class Cluster:
     """
     A base cluster controller for scaling.
     """
+
     def __init__(
         self,
         name=None,
@@ -22,9 +24,6 @@ class Cluster:
         """
         A simple class to control creating a cluster
         """
-        # This client we can use to interact with Google Cloud GKE
-        # https://github.com/googleapis/python-container/blob/main/google/cloud/container_v1/services/cluster_manager/client.py#L96
-        print("⭐️ Creating global cluster manager client...")
         self.node_count = node_count
         self.tags = tags or ["kubescaler-cluster"]
         self.name = name or "kubescaler-cluster"

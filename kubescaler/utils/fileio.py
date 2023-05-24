@@ -69,7 +69,6 @@ def mkdir_p(path):
             logger.exit("Error creating path %s, exiting." % path)
 
 
-
 def get_tmpfile(tmpdir=None, prefix="kubescaler-"):
     """
     Get a temporary file with an optional prefix.
