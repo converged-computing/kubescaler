@@ -1,0 +1,14 @@
+include README.md
+include COPYRIGHT
+recursive-include kubescaler *.png
+recursive-include kubescaler *.sh
+recursive-include kubescaler *
+recursive-include * *.png
+prune env*
+global-exclude .env
+global-exclude *.py[co]
+recursive-exclude .git *
+global-exclude __pycache__
+prune docs*
+prune kubescaler/tests
+prune apigen
