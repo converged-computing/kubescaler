@@ -1,13 +1,17 @@
-from google.cloud import container_v1
-from google.api_core.exceptions import NotFound
-from kubescaler.decorators import timed, retry
-from kubescaler.cluster import Cluster
 import time
+
+from google.api_core.exceptions import NotFound
+from google.cloud import container_v1
+
+from kubescaler.cluster import Cluster
+from kubescaler.decorators import retry, timed
+
 
 class GKECluster(Cluster):
     """
     A scaler for a Google Kubernetes Engine (GKE) cluster
     """
+
     def __init__(
         self,
         project,
@@ -16,7 +20,7 @@ class GKECluster(Cluster):
         machine_type_memory_gb=32,
         machine_type_vcpu=8,
         region="us-central1-a",
-        **kwargs
+        **kwargs,
     ):
         """
         A simple class to control creating a cluster
@@ -42,7 +46,6 @@ class GKECluster(Cluster):
         # Make the request, and check until deleted!
         self.client.delete_cluster(request=request)
         self.wait_for_delete()
-        # TODO we need a wait for create too!
 
     @property
     def zone(self):

@@ -3,8 +3,9 @@
 #
 # SPDX-License-Identifier: (MIT)
 
-from functools import partial, update_wrapper
 import time
+from functools import partial, update_wrapper
+
 
 class timed:
     """
