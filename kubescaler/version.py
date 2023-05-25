@@ -3,12 +3,12 @@
 #
 # SPDX-License-Identifier: (MIT)
 
-__version__ = "0.0.0"
+__version__ = "0.0.1"
 AUTHOR = "Vanessa Sochat"
 EMAIL = "vsoch@users.noreply.github.com"
 NAME = "kubescaler"
 PACKAGE_URL = "https://github.com/converged-computing/kubescaler"
-KEYWORDS = "Kubernetes, elasticity, scaling"
+KEYWORDS = "Kubernetes, elasticity, scaling, EKS, GKE"
 DESCRIPTION = "Helper classes for scaling Kubernetes clusters"
 LICENSE = "LICENSE"
 
@@ -20,15 +20,16 @@ LICENSE = "LICENSE"
 INSTALL_REQUIRES = (
     ("ruamel.yaml", {"min_version": None}),
     ("jsonschema", {"min_version": None}),
+    ("kubernetes", {"min_version": None}),
 )
 
-AWS_REQUIRES = (("boto3", {"min_version": None}),)
+AWS_REQUIRES = (
+    ("awscli", {"min_version": None}),
+    ("boto3", {"min_version": None}),
+)
 
 # Prefer discovery clients - more control
-GOOGLE_CLOUD_REQUIRES = (
-    #    ("google-auth", {"min_version": None}),
-    ("google-cloud-container", {"min_version": None}),
-)
+GOOGLE_CLOUD_REQUIRES = (("google-cloud-container", {"min_version": None}),)
 
 TESTS_REQUIRES = (("pytest", {"min_version": "4.6.2"}),)
 
