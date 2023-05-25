@@ -156,7 +156,12 @@ class EKSCluster(Cluster):
         # We can likely do it this way in the future (will open issue)
         config.load_kube_config(self.kube_config_file)
         koobcli = k8s.ApiClient()
-        return k8sutils.create_from_yaml(koobcli, self.auth_config_file)
+
+        # If the cluster was already created, this would raise an error
+        try:
+            k8sutils.create_from_yaml(koobcli, self.auth_config_file)
+        except Exception:
+            pass
 
     def ensure_kube_config(self):
         """
@@ -244,6 +249,18 @@ class EKSCluster(Cluster):
             if output["OutputKey"] == "NodeInstanceRole":
                 self.node_instance_role = output["OutputValue"]
 
+    def delete_workers_stack(self):
+        """
+        Delete the workers stack.
+        """
+        return self.delete_stack(self.workers_name)
+
+    def delete_vpc_stack(self):
+        """
+        Delete the vpc stack
+        """
+        return self.delete_stack(self.vpc_name)
+
     def create_workers_stack(self):
         """
         Create the workers stack (the nodes for the EKS cluster)
@@ -265,6 +282,10 @@ class EKSCluster(Cluster):
                 {
                     "ParameterKey": "NodeAutoScalingGroupMinSize",
                     "ParameterValue": str(self.min_nodes),
+                },
+                {
+                    "ParameterKey": "NodeAutoScalingGroupDesiredCapacity",
+                    "ParameterValue": str(self.node_count),
                 },
                 {
                     "ParameterKey": "NodeAutoScalingGroupMaxSize",
@@ -350,10 +371,26 @@ class EKSCluster(Cluster):
             waiter = self.cf.get_waiter("stack_create_complete")
             waiter.wait(StackName=stack_name)
         except Exception:
-            raise ValueError("Waiting for stack exceeded wait time.")
+            raise ValueError("Waiting for stack creation exceeded wait time.")
 
         # Retrieve the same metadata if we had retrieved it
         return self.cf.describe_stacks(StackName=stack_name)
+
+    def delete_stack(self, stack_name):
+        """
+        Delete a stack and wait for it to be deleted
+        """
+        try:
+            self.cf.delete_stack(StackName=stack_name)
+        except Exception:
+            logger.warning("Stack {stack_name} does not exist.")
+            return
+        try:
+            logger.info(f"Waiting for {stack_name} to be deleted..")
+            waiter = self.cf.get_waiter("stack_delete_complete")
+            waiter.wait(StackName=stack_name)
+        except Exception:
+            raise ValueError("Waiting for stack deletion exceeded wait time.")
 
     def set_roles(self):
         """
@@ -444,11 +481,23 @@ class EKSCluster(Cluster):
     def delete_cluster(self):
         """
         Delete the cluster
-        """
-        print("TODO DELETE")
-        import IPython
 
-        IPython.embed()
+        Let's be conservative and leave the kube config files, because if
+        something goes wrong we want to be able to interact with them.
+        And let's go backwards - deleting first what we created last.
+        """
+        self.delete_workers_stack()
+        # We could delete keypair, but let's keep for now, assuming could be reused elsewhere
+        # and a deletion might be unexpected to the user
+
+        # Now delete the cluster
+        self.eks.delete_cluster(self.cluster_name)
+        logger.info("⭐️ Cluster deletion started! Waiting...")
+        waiter = self.eks.get_waiter("cluster_deleted")
+        waiter.wait(name=self.cluster_name)
+
+        # Delete the VPC stack and we are done!
+        self.delete_vpc_stack()
 
     @property
     def data(self):
