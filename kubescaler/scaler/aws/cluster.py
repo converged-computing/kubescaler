@@ -5,7 +5,9 @@
 
 import json
 import os
+import subprocess
 import sys
+import time
 
 try:
     import boto3
@@ -18,7 +20,7 @@ from kubernetes import utils as k8sutils
 
 import kubescaler.utils as utils
 from kubescaler.cluster import Cluster
-from kubescaler.decorators import timed
+from kubescaler.decorators import retry, timed
 from kubescaler.logger import logger
 
 from .ami import get_latest_ami
@@ -49,7 +51,7 @@ class EKSCluster(Cluster):
         """
         Create an Amazon Cluster
         """
-        super().__init__(**kwargs)
+        super().__init__(name=name, **kwargs)
 
         # name for K8s IAM role
         self.admin_role_name = admin_role_name or "EKSServiceAdmin"
@@ -65,7 +67,7 @@ class EKSCluster(Cluster):
         self.stack_timeout_minutes = max(1, stack_timeout_minutes)
 
         # Here we define cluster name from name
-        self.cluster_name = name
+        self.cluster_name = self.name
         self.tags = self.tags or {}
         if not isinstance(self.tags, dict):
             raise ValueError("Tags must be key value pairs (dict)")
@@ -84,10 +86,7 @@ class EKSCluster(Cluster):
 
         # Will be set later!
         self.workers_stack = None
-        self.workers_stack_id = None
-
         self.vpc_stack = None
-        self.vpc_stack_id = None
         self.vpc_security_group = None
         self.vpc_subnet_private = None
         self.vpc_subnet_public = None
@@ -139,8 +138,48 @@ class EKSCluster(Cluster):
         self.set_workers_stack()
         self.create_auth_config()
 
-        print(f"Writing config file to {self.kube_config_file}")
+        # We can only wait for the node group after we set the auth config!
+        # I was surprised this is expecting the workers name and not the node
+        # group name.
+        self.wait_for_nodes()
+
+        print(f"🦊️ Writing config file to {self.kube_config_file}")
         print(f"  Usage: kubectl --kubeconfig={self.kube_config_file} get nodes")
+        return cluster
+
+    @timed
+    def wait_for_nodes(self):
+        """
+        Wait for the nodes to be ready.
+
+        We do this separately to allow timing. This function would be improved if
+        we didn't need subprocess, but the waiter doesn't seem to work.
+        """
+        while True:
+            print(f"Waiting for {self.node_count} nodes to be Ready...")
+            time.sleep(5)
+            # TODO fix to not require doing this! Maybe someone else wants to take a look?
+            res = subprocess.check_output(
+                [
+                    "kubectl",
+                    f"--kubeconfig={self.kube_config_file}",
+                    "--no-headers=true",
+                    "get",
+                    "nodes",
+                ]
+            )
+            lines = [x.strip() for x in res.decode("utf-8").split("\n") if x.strip()]
+            ready_count = 0
+            for line in lines:
+                if "NotReady" in line:
+                    continue
+                ready_count += 1
+            if ready_count == self.node_count:
+                break
+
+        # The waiter doesn't seem to work - so we call kubectl until it's ready
+        # waiter = self.eks.get_waiter("nodegroup_active")
+        # waiter.wait(clusterName=self.cluster_name, nodegroupName=self.node_autoscaling_group_name)
 
     def create_auth_config(self):
         """
@@ -241,26 +280,30 @@ class EKSCluster(Cluster):
             self.workers_stack = self.cf.describe_stacks(StackName=self.workers_name)
         except Exception:
             self.workers_stack = self.create_workers_stack()
-        self.workers_stack_id = self.workers_stack["StackId"]
 
         # We need this role to later associate master with workers
         self.node_instance_role = None
         for output in self.workers_stack["Stacks"][0]["Outputs"]:
             if output["OutputKey"] == "NodeInstanceRole":
                 self.node_instance_role = output["OutputValue"]
+            if output["OutputKey"] == "NodeAutoScalingGroup":
+                self.node_autoscaling_group_name = output["OutputValue"]
 
+    @timed
     def delete_workers_stack(self):
         """
         Delete the workers stack.
         """
         return self.delete_stack(self.workers_name)
 
+    @timed
     def delete_vpc_stack(self):
         """
         Delete the vpc stack
         """
         return self.delete_stack(self.vpc_name)
 
+    @timed
     def create_workers_stack(self):
         """
         Create the workers stack (the nodes for the EKS cluster)
@@ -277,7 +320,7 @@ class EKSCluster(Cluster):
                 },
                 {
                     "ParameterKey": "NodeGroupName",
-                    "ParameterValue": self.cluster_name + "-worker-group",
+                    "ParameterValue": self.node_group_name,
                 },
                 {
                     "ParameterKey": "NodeAutoScalingGroupMinSize",
@@ -340,9 +383,8 @@ class EKSCluster(Cluster):
             self.vpc_stack = self.cf.describe_stacks(StackName=self.vpc_name)
         except Exception:
             self.vpc_stack = self.create_vpc_stack()
-        self.vpc_stack_id = self.vpc_stack["StackId"]
 
-    def create_stack(self):
+    def create_vpc_stack(self):
         """
         Create a new stack from the template
         """
@@ -380,10 +422,11 @@ class EKSCluster(Cluster):
         """
         Delete a stack and wait for it to be deleted
         """
+        logger.info(f"🥞️ Attempting delete of stack {stack_name}...")
         try:
             self.cf.delete_stack(StackName=stack_name)
         except Exception:
-            logger.warning("Stack {stack_name} does not exist.")
+            logger.warning(f"Stack {stack_name} does not exist.")
             return
         try:
             logger.info(f"Waiting for {stack_name} to be deleted..")
@@ -443,11 +486,11 @@ class EKSCluster(Cluster):
         """
         Create VPC subnets
         """
-        if not self.stack:
+        if not self.vpc_stack:
             raise ValueError("set_subnets needs to be called after stack creation.")
 
         # Unwrap list of outputs into values we care about.
-        for output in self.stack["Stacks"][0]["Outputs"]:
+        for output in self.vpc_stack["Stacks"][0]["Outputs"]:
             if output["OutputKey"] == "SecurityGroups":
                 self.vpc_security_group = output["OutputValue"]
             if output["OutputKey"] == "VPC":
@@ -458,7 +501,7 @@ class EKSCluster(Cluster):
                 self.vpc_subnet_private = output["OutputValue"].split(",")
 
     @property
-    def vpc_submit_ids(self):
+    def vpc_subnet_ids(self):
         """
         Get listing of private and public subnet ids
         """
@@ -477,6 +520,10 @@ class EKSCluster(Cluster):
     def workers_name(self):
         return self.name + "-workers"
 
+    @property
+    def node_group_name(self):
+        return self.cluster_name + "-worker-group"
+
     @timed
     def delete_cluster(self):
         """
@@ -486,18 +533,26 @@ class EKSCluster(Cluster):
         something goes wrong we want to be able to interact with them.
         And let's go backwards - deleting first what we created last.
         """
+        logger.info("🔨️ Deleting node workers...")
         self.delete_workers_stack()
         # We could delete keypair, but let's keep for now, assuming could be reused elsewhere
         # and a deletion might be unexpected to the user
 
         # Now delete the cluster
-        self.eks.delete_cluster(self.cluster_name)
-        logger.info("⭐️ Cluster deletion started! Waiting...")
+        try:
+            self.eks.delete_cluster(name=self.cluster_name)
+        except Exception as e:
+            logger.info(f"⏳️ Cluster likely already deleted: {e}")
+            return
+
+        logger.info("⏳️ Cluster deletion started! Waiting...")
         waiter = self.eks.get_waiter("cluster_deleted")
         waiter.wait(name=self.cluster_name)
 
         # Delete the VPC stack and we are done!
+        logger.info("🥅️ Deleting VPC and associated assets...")
         self.delete_vpc_stack()
+        logger.info("⭐️ Done!")
 
     @property
     def data(self):
@@ -513,3 +568,57 @@ class EKSCluster(Cluster):
             "tags": self.tags,
             "description": self.description,
         }
+
+    @retry
+    def scale(self, count):
+        """
+        Make a request to scale the cluster
+        """
+        response = self.cf.update_stack(
+            StackName=self.workers_name,
+            UsePreviousTemplate=True,
+            Capabilities=["CAPABILITY_IAM"],
+            Parameters=[
+                {
+                    "ParameterKey": "NodeAutoScalingGroupDesiredCapacity",
+                    "ParameterValue": str(count),
+                },
+                {"ParameterKey": "ClusterName", "UsePreviousValue": True},
+                {
+                    "ParameterKey": "ClusterControlPlaneSecurityGroup",
+                    "ParameterValue": self.vpc_security_group,
+                },
+                {
+                    "ParameterKey": "NodeGroupName",
+                    "ParameterValue": self.node_group_name,
+                },
+                {
+                    "ParameterKey": "NodeAutoScalingGroupMinSize",
+                    "ParameterValue": str(self.min_nodes),
+                },
+                {
+                    "ParameterKey": "NodeAutoScalingGroupDesiredCapacity",
+                    "ParameterValue": str(count),
+                },
+                {
+                    "ParameterKey": "NodeAutoScalingGroupMaxSize",
+                    "ParameterValue": str(self.max_nodes),
+                },
+                {"ParameterKey": "KeyName", "ParameterValue": self.keypair_name},
+                {"ParameterKey": "VpcId", "ParameterValue": self.vpc_id},
+                {
+                    "ParameterKey": "Subnets",
+                    "ParameterValue": ",".join(self.vpc_subnet_ids),
+                },
+            ],
+        )
+
+        # Wait for stack update to be complete. Note this does not seem
+        # to work. Instead we update the node count and then wait for the nodes.
+        # waiter = self.cf.get_waiter('stack_update_complete')
+        # waiter.wait(StackName=self.workers_name)
+
+        # If successful, save new node count
+        self.node_count = count
+        self.wait_for_nodes()
+        return response

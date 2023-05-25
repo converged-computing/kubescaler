@@ -44,6 +44,11 @@ tool to generate a contributors graphic below.
 
 <!-- ALL-CONTRIBUTORS-LIST:END -->
 
+## TODO
+
+ - fix up GKE scale function to only be one function, we don't need to reset max and min again
+ - run experiments for scaling on EKS
+
 ## License
 
 HPCIC DevTools is distributed under the terms of the MIT license.

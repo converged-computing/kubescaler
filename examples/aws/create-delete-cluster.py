@@ -63,6 +63,7 @@ def main():
         node_count=args.node_count,
         max_nodes=args.max_node_count,
         min_nodes=args.min_node_count,
+        machine_type=args.machine_type,
     )
     cli.create_cluster()
     print("⭐️ Deleting the cluster...")
