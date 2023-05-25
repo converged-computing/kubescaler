@@ -16,7 +16,7 @@ up and down, of your Kubernetes clusters in Python. We currently have support fo
 we use, namely:
 
 - Google (GKE)
-- Amazon (EKS) (under development)
+- Amazon (EKS)
 
 🚧️ **under development** 🚧️
 

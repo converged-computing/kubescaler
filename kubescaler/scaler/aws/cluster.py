@@ -349,6 +349,7 @@ class EKSCluster(Cluster):
             TimeoutInMinutes=self.stack_timeout_minutes,
             OnFailure=self.on_stack_failure,
         )
+        print(self.stack_timeout_minutes)
         return self._create_stack(stack, self.workers_name)
 
     def new_cluster(self):
@@ -401,6 +402,9 @@ class EKSCluster(Cluster):
     def _create_stack(self, stack, stack_name):
         """
         Shared function to check validity of stack and wait!
+
+        I didn't add retry here, because it usually fails for some
+        "good" reason (e.g., not enough network)
         """
         if stack is None:
             raise ValueError("Could not create stack")
