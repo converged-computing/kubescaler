@@ -21,6 +21,10 @@ class timed:
 
     def __call__(self, cls, *args, **kwargs):
         name = self.func.__name__
+
+        # If it's not create or delete cluster we need the node count
+        if name not in ["create_cluster", "delete_cluster"]:
+            name = f"{name}-size-{cls.node_count}"
         start = time.time()
         res = self.func(cls, *args, **kwargs)
         end = time.time()

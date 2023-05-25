@@ -148,7 +148,7 @@ def copyfile(source, destination, force=True):
     return destination
 
 
-def write_file(filename, content, mode="w", exec=False):
+def write_file(content, filename, mode="w", exec=False):
     """
     Write content to a filename
     """

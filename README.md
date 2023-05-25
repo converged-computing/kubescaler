@@ -16,7 +16,7 @@ up and down, of your Kubernetes clusters in Python. We currently have support fo
 we use, namely:
 
 - Google (GKE)
-- Amazon (EKS) (under development)
+- Amazon (EKS)
 
 🚧️ **under development** 🚧️
 
@@ -43,6 +43,11 @@ tool to generate a contributors graphic below.
 <!-- prettier-ignore-end -->
 
 <!-- ALL-CONTRIBUTORS-LIST:END -->
+
+## TODO
+
+ - fix up GKE scale function to only be one function, we don't need to reset max and min again
+ - run experiments for scaling on EKS
 
 ## License
 

@@ -1,10 +1,19 @@
-import time
+# Copyright 2023 Lawrence Livermore National Security, LLC and other
+# HPCIC DevTools Developers. See the top-level COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: (MIT)
 
-from google.api_core.exceptions import NotFound
-from google.cloud import container_v1
+import sys
+import time
 
 from kubescaler.cluster import Cluster
 from kubescaler.decorators import retry, timed
+
+try:
+    from google.api_core.exceptions import NotFound
+    from google.cloud import container_v1
+except ImportError:
+    sys.exit("Please pip install kubescaler[google]")
 
 
 class GKECluster(Cluster):
@@ -12,30 +21,29 @@ class GKECluster(Cluster):
     A scaler for a Google Kubernetes Engine (GKE) cluster
     """
 
+    default_region = "us-central1-a"
+
     def __init__(
         self,
         project,
-        *args,
-        machine_type="c2-standard-8",
         machine_type_memory_gb=32,
         machine_type_vcpu=8,
-        region="us-central1-a",
         **kwargs,
     ):
         """
         A simple class to control creating a cluster
         """
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
 
         # This client we can use to interact with Google Cloud GKE
         # https://github.com/googleapis/python-container/blob/main/google/cloud/container_v1/services/cluster_manager/client.py#L96
         print("⭐️ Creating global cluster manager client...")
         self.client = container_v1.ClusterManagerClient()
         self.project = project
-        self.region = region
-        self.machine_type = machine_type
+        self.machine_type = self.machine_type or "c2-standard-8"
         self.machine_type_vcpu = machine_type_vcpu
         self.machine_type_memory_gb = machine_type_memory_gb
+        self.tags = self.tags or ["kubescaler-cluster"]
 
     @timed
     def delete_cluster(self):
@@ -79,7 +87,9 @@ class GKECluster(Cluster):
         """
         Make a request to scale the cluster
         """
-        return self.scale(count, max(count - 1, 0), count, pool_name=pool_name)
+        return self.scale(
+            count, max(count - 1, self.min_nodes), count, pool_name=pool_name
+        )
 
     def scale(self, count, min_count, max_count, pool_name="default-pool"):
         """

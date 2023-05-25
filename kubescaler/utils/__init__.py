@@ -17,4 +17,4 @@ from .fileio import (
     write_yaml,
 )
 from .misc import chunks, get_hash, mb_to_bytes, print_bytes, slugify
-from .terminal import confirm_action, get_installdir, run_command
+from .terminal import confirm_action, get_installdir
