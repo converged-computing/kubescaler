@@ -3,13 +3,19 @@
 #
 # SPDX-License-Identifier: (MIT)
 
+import base64
 import sys
+import tempfile
 import time
+
+from kubernetes import client as kubernetes_client
 
 from kubescaler.cluster import Cluster
 from kubescaler.decorators import retry, timed
 
 try:
+    import google.auth
+    import google.auth.transport.requests
     from google.api_core.exceptions import NotFound
     from google.cloud import container_v1
 except ImportError:
@@ -152,6 +158,28 @@ class GKECluster(Cluster):
         print("\n🥣️ cluster node_config")
         print(node_config)
         return node_config
+
+    def get_k8s_client(self) -> kubernetes_client.CoreV1Api:
+        """
+        Get a client to use to interact with the cluster
+
+        https://github.com/googleapis/python-container/issues/6
+        """
+        request = {"name": self.cluster_name}
+        response = self.client.get_cluster(request=request)
+        creds, projects = google.auth.default(
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+        auth_req = google.auth.transport.requests.Request()
+        creds.refresh(auth_req)
+        configuration = kubernetes_client.Configuration()
+        configuration.host = f"https://{response.endpoint}"
+        with tempfile.NamedTemporaryFile(delete=False) as ca_cert:
+            ca_cert.write(base64.b64decode(response.master_auth.cluster_ca_certificate))
+            configuration.ssl_ca_cert = ca_cert.name
+        configuration.api_key_prefix["authorization"] = "Bearer"
+        configuration.api_key["authorization"] = creds.token
+        return kubernetes_client.CoreV1Api(kubernetes_client.ApiClient(configuration))
 
     @property
     def cluster(self):

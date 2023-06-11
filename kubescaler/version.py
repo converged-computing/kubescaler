@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: (MIT)
 
-__version__ = "0.0.1"
+__version__ = "0.0.11"
 AUTHOR = "Vanessa Sochat"
 EMAIL = "vsoch@users.noreply.github.com"
 NAME = "kubescaler"
@@ -29,7 +29,10 @@ AWS_REQUIRES = (
 )
 
 # Prefer discovery clients - more control
-GOOGLE_CLOUD_REQUIRES = (("google-cloud-container", {"min_version": None}),)
+GOOGLE_CLOUD_REQUIRES = (
+    ("google-cloud-container", {"min_version": None}),
+    ("google-api-python-client", {"min_version": None}),
+)
 
 TESTS_REQUIRES = (("pytest", {"min_version": "4.6.2"}),)
 
