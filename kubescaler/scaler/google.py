@@ -3,13 +3,19 @@
 #
 # SPDX-License-Identifier: (MIT)
 
+import base64
 import sys
+import tempfile
 import time
+
+from kubernetes import client as kubernetes_client
 
 from kubescaler.cluster import Cluster
 from kubescaler.decorators import retry, timed
 
 try:
+    import google.auth
+    import google.auth.transport.requests
     from google.api_core.exceptions import NotFound
     from google.cloud import container_v1
 except ImportError:
@@ -44,6 +50,7 @@ class GKECluster(Cluster):
         self.machine_type_vcpu = machine_type_vcpu
         self.machine_type_memory_gb = machine_type_memory_gb
         self.tags = self.tags or ["kubescaler-cluster"]
+        self.configuration = None
 
     @timed
     def delete_cluster(self):
@@ -53,6 +60,7 @@ class GKECluster(Cluster):
         request = container_v1.DeleteClusterRequest(name=self.cluster_name)
         # Make the request, and check until deleted!
         self.client.delete_cluster(request=request)
+        self.configuration = None
         self.wait_for_delete()
 
     @property
@@ -152,6 +160,39 @@ class GKECluster(Cluster):
         print("\n🥣️ cluster node_config")
         print(node_config)
         return node_config
+
+    def get_k8s_client(self):
+        """
+        Get a client to use to interact with the cluster, either corev1.api
+        or the kubernetes api client.
+
+        https://github.com/googleapis/python-container/issues/6
+        """
+        request = {"name": self.cluster_name}
+        response = self.client.get_cluster(request=request)
+        creds, projects = google.auth.default(
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+        auth_req = google.auth.transport.requests.Request()
+        creds.refresh(auth_req)
+
+        # Save the configuration for advanced users to user later
+        if not self.configuration:
+            configuration = kubernetes_client.Configuration()
+            configuration.host = f"https://{response.endpoint}"
+            with tempfile.NamedTemporaryFile(delete=False) as ca_cert:
+                ca_cert.write(
+                    base64.b64decode(response.master_auth.cluster_ca_certificate)
+                )
+                configuration.ssl_ca_cert = ca_cert.name
+            configuration.api_key_prefix["authorization"] = "Bearer"
+            configuration.api_key["authorization"] = creds.token
+            self.configuration = configuration
+
+        # This has .api_client for just the api client
+        return kubernetes_client.CoreV1Api(
+            kubernetes_client.ApiClient(self.configuration)
+        )
 
     @property
     def cluster(self):

@@ -14,5 +14,6 @@ and **Merged pull requests**. Critical items to know are:
 The versions coincide with releases on pip. Only major versions will be released as tags on Github.
 
 ## [0.0.x](https://github.com/converged-computing/kubescaler/tree/main) (0.0.x)
+ - GKE with ability to get kubernetes client (0.0.11)
  - support for AWS EKS and first versioned release (0.0.1)
  - initial skeleton release of project (0.0.0)
