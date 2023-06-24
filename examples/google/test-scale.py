@@ -6,7 +6,7 @@ import os
 import sys
 import time
 
-from kubescaler.scaler import GKECluster
+from kubescaler.scaler.google import GKECluster
 from kubescaler.utils import read_json
 
 # Save data here

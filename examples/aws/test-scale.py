@@ -6,7 +6,7 @@ import os
 import sys
 import time
 
-from kubescaler.scaler import EKSCluster
+from kubescaler.scaler.aws import EKSCluster
 from kubescaler.utils import read_json
 
 # Save data here

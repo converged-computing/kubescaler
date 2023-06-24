@@ -4,7 +4,7 @@ import argparse
 import sys
 import time
 
-from kubescaler.scaler import EKSCluster
+from kubescaler.scaler.aws import EKSCluster
 
 
 def get_parser():
