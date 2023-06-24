@@ -90,10 +90,10 @@ if __name__ == "__main__":
         long_description_content_type="text/markdown",
         keywords=KEYWORDS,
         setup_requires=["pytest-runner"],
-        install_requires=INSTALL_REQUIRES,
+        install_requires=INSTALL_REQUIRES_ALL,
         tests_require=TESTS_REQUIRES,
         extras_require={
-            "all": [INSTALL_REQUIRES_ALL],
+            "basic": [INSTALL_REQUIRES],
             "google": INSTALL_REQUIRES_GOOGLE,
             "aws": INSTALL_REQUIRES_AWS,
         },
