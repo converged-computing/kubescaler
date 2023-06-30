@@ -3,10 +3,11 @@
 #
 # SPDX-License-Identifier: (MIT)
 
+import base64
 import json
 import os
-import subprocess
 import sys
+import tempfile
 import time
 
 try:
@@ -25,6 +26,7 @@ from kubescaler.logger import logger
 
 from .ami import get_latest_ami
 from .template import auth_config_data, vpc_template, workers_template
+from .token import get_bearer_token
 
 stack_failure_options = ["DELETE", "DO_NOTHING", "ROLLBACK"]
 
@@ -65,6 +67,7 @@ class EKSCluster(Cluster):
         # DO_NOTHING | ROLLBACK | DELETE
         self.set_stack_failure(on_stack_failure)
         self.stack_timeout_minutes = max(1, stack_timeout_minutes)
+        self.token_expires = kwargs.get("token_expires")
 
         # Here we define cluster name from name
         self.cluster_name = self.name
@@ -76,6 +79,8 @@ class EKSCluster(Cluster):
         self.kube_config_file = kube_config_file or "kubeconfig-aws.yaml"
         self.image_ami = get_latest_ami(self.region, self.kubernetes_version)
         self.machine_type = self.machine_type or "m5.large"
+        self.configuration = None
+        self._kubectl = None
 
         # Client connections
         self.session = boto3.Session(region_name=self.region)
@@ -112,21 +117,22 @@ class EKSCluster(Cluster):
         self.set_vpc_stack()
         self.set_subnets()
 
+        # Save cluster metadata so we can get the k8s client later
         try:
-            cluster = self.eks.describe_cluster(name=self.cluster_name)
+            self.cluster = self.eks.describe_cluster(name=self.cluster_name)
         except Exception:
-            cluster = self.new_cluster()
+            self.cluster = self.new_cluster()
 
         # Get the status and confirm it's active
-        status = cluster["cluster"]["status"]
+        status = self.cluster["cluster"]["status"]
         if status != "ACTIVE":
             raise ValueError(
                 f"Found cluster {self.cluster_name} but status is {status} and should be ACTIVE"
             )
 
         # Get cluster endpoint and security info so we can make kubectl config
-        self.certificate = cluster["cluster"]["certificateAuthority"]["data"]
-        self.endpoint = cluster["cluster"]["endpoint"]
+        self.certificate = self.cluster["cluster"]["certificateAuthority"]["data"]
+        self.endpoint = self.cluster["cluster"]["endpoint"]
 
         # Ensure we have a config to interact with, and write the keypair file
         self.ensure_kube_config()
@@ -134,7 +140,7 @@ class EKSCluster(Cluster):
 
         # The cluster is actually created with no nodes - just the control plane!
         # Here is where we create the workers, via a stack. Because apparently
-        # AWS really likes their pancakes.
+        # AWS really likes their pancakes. 🥞️
         self.set_workers_stack()
         self.create_auth_config()
 
@@ -145,7 +151,49 @@ class EKSCluster(Cluster):
 
         print(f"🦊️ Writing config file to {self.kube_config_file}")
         print(f"  Usage: kubectl --kubeconfig={self.kube_config_file} get nodes")
-        return cluster
+        return self.cluster
+
+    def get_k8s_client(self):
+        """
+        Get a client to use to interact with the cluster, either corev1.api
+        or the kubernetes api client.
+
+        https://github.com/googleapis/python-container/issues/6
+        """
+        if self._kubectl:
+            return self._kubectl
+
+        # Save the configuration for advanced users to user later
+        if not self.configuration:
+            # This is separate in case we need to manually call it (expires, etc.)
+            self._generate_configuration()
+
+        # This has .api_client for just the api client
+        self._kubectl = k8s.CoreV1Api(k8s.ApiClient(self.configuration))
+        return self._kubectl
+
+    def _generate_configuration(self):
+        """
+        Generate the kubectl configuration, no matter what.
+
+        This is separate from the get_k8s_client function as we might want
+        to call it to regenerate the self.configuration and self._kubectl.
+        """
+        # Get a token from the aws client, which must be installed
+        # aws eks get-token --cluster-name example
+        token = get_bearer_token(self.cluster_name, self.token_expires)
+        configuration = k8s.Configuration()
+        configuration.host = self.cluster["cluster"]["endpoint"]
+        with tempfile.NamedTemporaryFile(delete=False) as ca_cert:
+            ca_cert.write(
+                base64.b64decode(
+                    self.cluster["cluster"]["certificateAuthority"]["data"]
+                )
+            )
+            configuration.ssl_ca_cert = ca_cert.name
+        configuration.api_key_prefix["authorization"] = "Bearer"
+        configuration.api_key["authorization"] = token["status"]["token"]
+        self.configuration = configuration
 
     @timed
     def wait_for_nodes(self):
@@ -155,25 +203,17 @@ class EKSCluster(Cluster):
         We do this separately to allow timing. This function would be improved if
         we didn't need subprocess, but the waiter doesn't seem to work.
         """
+        kubectl = self.get_k8s_client()
         while True:
             print(f"Waiting for {self.node_count} nodes to be Ready...")
             time.sleep(5)
-            # TODO fix to not require doing this! Maybe someone else wants to take a look?
-            res = subprocess.check_output(
-                [
-                    "kubectl",
-                    f"--kubeconfig={self.kube_config_file}",
-                    "--no-headers=true",
-                    "get",
-                    "nodes",
-                ]
-            )
-            lines = [x.strip() for x in res.decode("utf-8").split("\n") if x.strip()]
+            nodes = kubectl.list_node()
             ready_count = 0
-            for line in lines:
-                if "NotReady" in line:
-                    continue
-                ready_count += 1
+            for node in nodes.items:
+                for condition in node.status.conditions:
+                    # Don't add to node ready count if not ready
+                    if condition.type == "Ready" and condition.status == "True":
+                        ready_count += 1
             if ready_count == self.node_count:
                 break
 
@@ -415,9 +455,12 @@ class EKSCluster(Cluster):
         try:
             logger.info(f"Waiting for {stack_name} stack...")
             waiter = self.cf.get_waiter("stack_create_complete")
+            # MaxAttempts defaults to 120, and Delay 30 seconds
             waiter.wait(StackName=stack_name)
-        except Exception:
-            raise ValueError("Waiting for stack creation exceeded wait time.")
+        except Exception as e:
+            # Allow waiting 3 more minutes
+            print(f"Waiting for stack creation exceeded wait time: {e}")
+            time.sleep(180)
 
         # Retrieve the same metadata if we had retrieved it
         return self.cf.describe_stacks(StackName=stack_name)
