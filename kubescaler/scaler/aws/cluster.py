@@ -436,6 +436,7 @@ class EKSCluster(Cluster):
         except Exception:
             self.vpc_stack = self.create_vpc_stack()
 
+    @timed
     def create_vpc_stack(self):
         """
         Create a new stack from the template
@@ -610,6 +611,7 @@ class EKSCluster(Cluster):
         # Delete the VPC stack and we are done!
         logger.info("🥅️ Deleting VPC and associated assets...")
         self.delete_vpc_stack()
+        self.delete_worker_stack()
         logger.info("⭐️ Done!")
 
     @property

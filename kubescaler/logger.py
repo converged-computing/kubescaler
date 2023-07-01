@@ -189,7 +189,7 @@ def setup_logger(
     printshellcmds=False,
     nocolor=False,
     stdout=False,
-    debug=False,
+    debug=True,
     use_threads=False,
 ):
     # console output only if no custom logger was specified
