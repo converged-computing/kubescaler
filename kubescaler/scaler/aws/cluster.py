@@ -124,6 +124,7 @@ class EKSCluster(Cluster):
         It's best to be consistent and use an environment set (that ideally
         has a long enough expiration) OR just the $HOME/.aws/config.
         """
+        print("🥞️ Creating VPC stack and subnets...")
         self.set_vpc_stack()
         self.set_subnets()
 
@@ -131,6 +132,7 @@ class EKSCluster(Cluster):
         try:
             self.cluster = self.eks.describe_cluster(name=self.cluster_name)
         except Exception:
+            print("🥣️ Creating cluster...")
             self.cluster = self.new_cluster()
 
         # Get the status and confirm it's active
@@ -215,7 +217,7 @@ class EKSCluster(Cluster):
         """
         kubectl = self.get_k8s_client()
         while True:
-            print(f"Waiting for {self.node_count} nodes to be Ready...")
+            print(f"⏱️ Waiting for {self.node_count} nodes to be Ready...")
             time.sleep(5)
             nodes = kubectl.list_node()
             ready_count = 0
@@ -399,7 +401,6 @@ class EKSCluster(Cluster):
             TimeoutInMinutes=self.stack_timeout_minutes,
             OnFailure=self.on_stack_failure,
         )
-        print(self.stack_timeout_minutes)
         return self._create_stack(stack, self.workers_name)
 
     def new_cluster(self):
