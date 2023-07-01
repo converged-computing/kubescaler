@@ -112,7 +112,17 @@ class EKSCluster(Cluster):
     @timed
     def create_cluster(self):
         """
-        Create a cluster
+        Create a cluster.
+
+        To verify this is working, you should be able to view the Cloud Formation
+        in the console to see the VPC stack, and when that is complete, go to
+        EKS to see the cluster being created. When the cluster is created and
+        the nodes are up, the wait_for_nodes function should finish a little
+        bit after. If you don't see this happening, usually it means a mismatch
+        between the credentials you used to create the cluster, and the ones
+        that the AWS client discovers here (in token.py) to generate a token.
+        It's best to be consistent and use an environment set (that ideally
+        has a long enough expiration) OR just the $HOME/.aws/config.
         """
         self.set_vpc_stack()
         self.set_subnets()
