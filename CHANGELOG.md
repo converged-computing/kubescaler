@@ -14,6 +14,7 @@ and **Merged pull requests**. Critical items to know are:
 The versions coincide with releases on pip. Only major versions will be released as tags on Github.
 
 ## [0.0.x](https://github.com/converged-computing/kubescaler/tree/main) (0.0.x)
+ - use api client with consistent token to associate nodes to cluster (0.0.14)
  - remove dependency on subprocess and kubectl (0.0.13)
  - default install should include all cloud deps (0.0.12)
  - GKE with ability to get kubernetes client (0.0.11)
