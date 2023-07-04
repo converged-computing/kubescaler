@@ -246,8 +246,8 @@ class EKSCluster(Cluster):
 
         try:
             k8sutils.create_from_yaml(kubectl.api_client, self.auth_config_file)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"😭️ Kubectl create from yaml returns in error: {e}")
 
     def ensure_kube_config(self):
         """
