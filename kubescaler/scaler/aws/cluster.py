@@ -16,7 +16,6 @@ except ImportError:
     sys.exit("Please pip install kubescaler[aws]")
 
 from kubernetes import client as k8s
-from kubernetes import config
 from kubernetes import utils as k8sutils
 
 import kubescaler.utils as utils
@@ -75,7 +74,7 @@ class EKSCluster(Cluster):
         if not isinstance(self.tags, dict):
             raise ValueError("Tags must be key value pairs (dict)")
 
-        # kube config file
+        # kube config file (this is no longer used)
         self.kube_config_file = kube_config_file or "kubeconfig-aws.yaml"
         self.image_ami = get_latest_ami(self.region, self.kubernetes_version)
         self.machine_type = self.machine_type or "m5.large"
@@ -243,16 +242,12 @@ class EKSCluster(Cluster):
         # Easier to write to file and then apply!
         auth_config = auth_config_data % self.node_instance_role
         utils.write_file(auth_config, self.auth_config_file)
+        kubectl = self.get_k8s_client()
 
-        # We can likely do it this way in the future (will open issue)
-        config.load_kube_config(self.kube_config_file)
-        koobcli = k8s.ApiClient()
-
-        # If the cluster was already created, this would raise an error
         try:
-            k8sutils.create_from_yaml(koobcli, self.auth_config_file)
-        except Exception:
-            pass
+            k8sutils.create_from_yaml(kubectl.api_client, self.auth_config_file)
+        except Exception as e:
+            print(f"😭️ Kubectl create from yaml returns in error: {e}")
 
     def ensure_kube_config(self):
         """
@@ -611,7 +606,7 @@ class EKSCluster(Cluster):
         # Delete the VPC stack and we are done!
         logger.info("🥅️ Deleting VPC and associated assets...")
         self.delete_vpc_stack()
-        self.delete_worker_stack()
+        self.delete_workers_stack()
         logger.info("⭐️ Done!")
 
     @property
