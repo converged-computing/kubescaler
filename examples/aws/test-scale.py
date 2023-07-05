@@ -151,6 +151,14 @@ def main():
             else:
                 node_count += args.increment
 
+            # TODO Feature Request 
+            # The issue is when node_count exceeds the max_node_counts, we can only know at the end of the iteration
+            # However, by this time the scaling request is already going to the stack and the stack update fails. and the program wait for nodes indefinitely. 
+            # Possible solution is to prevent this happening and also if stack update fails, we can do something. 
+            # for now, Checking here to prevent node_count exceeding max nodes or min nodes.
+            if not keep_going(node_count):
+                break
+
             print(
                 f"⚖️ Iteration {iter}: scaling to {direction} by {args.increment}, from {old_size} to {node_count}"
             )
@@ -161,8 +169,11 @@ def main():
             end = time.time()
             seconds = round(end - start, 3)
             cli.times[f"scale_{tag}_{old_size}_to_{node_count}"] = seconds
+            
+            # TODO Bug Fixed
+            # Throwed error that res has no attribute named `initial_node_count`
             print(
-                f"📦️ Scaling from {old_size} to {node_count} took {seconds} seconds, and the cluster now has {res.initial_node_count} nodes!"
+                f"📦️ Scaling from {old_size} to {node_count} took {seconds} seconds, and the cluster now has {cli.node_count} nodes!"
             )
 
             # Save the times as we go

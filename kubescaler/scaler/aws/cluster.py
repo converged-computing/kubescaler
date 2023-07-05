@@ -225,7 +225,7 @@ class EKSCluster(Cluster):
                     # Don't add to node ready count if not ready
                     if condition.type == "Ready" and condition.status == "True":
                         ready_count += 1
-            if ready_count == self.node_count:
+            if ready_count >= self.node_count:
                 break
 
         # The waiter doesn't seem to work - so we call kubectl until it's ready
@@ -667,6 +667,25 @@ class EKSCluster(Cluster):
                 },
             ],
         )
+
+        # Wait for stack update to be complete. 
+        # Note the reason not to use waiter for `stack_update_complete` is that, the waiter throws error if stacks is in UPDATE_ROLLBACK_COMPLETE/PROGRESS state. 
+        # So, we're checking if the stack is in PROGRESS status in any scenario (Create/Update/Rollback). if it doesn't then it can only be in FAILED or COMPLETE STATE
+        while True:
+            stack_update = self.cf.describe_stacks(
+                StackName=self.workers_name
+            )
+            current_status = stack_update["Stacks"][0]["StackStatus"]
+            if "PROGRESS" in current_status:
+                print(f"The stack-{self.workers_name} is {current_status}")
+                time.sleep(5)
+                continue
+            else:
+                print(f"The stack-{self.workers_name} is {current_status}")
+                break
+            
+        ##TODO Feature Request
+        # if stack update fails, we can add some checks/returns something instead of waiting for nodes indefinitely. 
 
         # Wait for stack update to be complete. Note this does not seem
         # to work. Instead we update the node count and then wait for the nodes.

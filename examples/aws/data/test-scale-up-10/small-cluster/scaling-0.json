@@ -1,0 +1,21 @@
+{
+    "times": {
+        "create_vpc_stack-size-1": 213.684,
+        "create_workers_stack-size-1": 183.465,
+        "wait_for_nodes-size-1": 25.401,
+        "create_cluster": 1029.501,
+        "wait_for_nodes-size-11": 5.606,
+        "scale_up_1_to_11": 397.16,
+        "wait_for_nodes-size-21": 16.124,
+        "scale_up_11_to_21": 57.916,
+        "delete_workers_stack-size-21": 0.226,
+        "delete_vpc_stack-size-21": 91.863,
+        "delete_cluster": 306.106
+    },
+    "cluster_name": "test-scale-up-10-small-cluster",
+    "machine_type": "m5.large",
+    "name": "test-scale-up-10-small-cluster",
+    "region": "us-east-1",
+    "tags": {},
+    "description": "A Kubescaler testing cluster"
+}
