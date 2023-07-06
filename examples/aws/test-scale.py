@@ -99,11 +99,32 @@ def main():
         os.makedirs(outdir)
 
     # Define stopping conditions for two directions
-    def less_than_max(node_count):
-        return node_count <= args.max_node_count
+    def increase_by(node_count):
+        # If we are greater than or equal to max node count,
+        # return 0 to indicate no more scaling
+        if node_count >= args.max_node_count:
+            return 0
 
-    def greater_than_zero(node_count):
-        return node_count > 0
+        # If we still have more than the iteration size,
+        # allow an iteration of that size. This must be LESS THAN
+        if node_count + args.increment < args.max_node_count:
+            return args.increment
+
+        # Otherwise, return the difference (the largest step we can take)
+        return args.max_node_count - node_count
+
+    # aka, "greater than min" which has to be zero
+    def decrease_by(node_count):
+        # If we've gone into the negative (or hit it) no more reducing
+        if node_count <= 0:
+            return 0
+
+        # If we can go down the iteration size, allow it
+        if node_count - args.increment >= 0:
+            return args.increment
+
+        # Finally, allow whatever is left over!
+        return node_count
 
     # Update cluster name to include experiment name
     cluster_name = f"{experiment_name}-{cluster_name}"
@@ -131,43 +152,48 @@ def main():
             cli.times = result["times"]
 
         # Create the cluster (this times it)
-        res = cli.create_cluster()
+        cli.create_cluster()
         print(f"📦️ The cluster has {cli.node_count} nodes!")
 
         # Flip between functions to decide to keep going based on:
         # > 0 (we are decreasing from the max node count)
         # <= max nodes (we are going up from a min node count)
-        keep_going = less_than_max
+        next_increment = increase_by
         if args.down:
-            keep_going = greater_than_zero
+            next_increment = decrease_by
 
         # Continue scaling until we reach stopping condition
-        while keep_going(node_count):
+        # We just call this once to enter the loop (or not)
+        increment = next_increment(node_count)
+
+        # Keep going while increment is not 0!
+        while increment:
             old_size = node_count
 
             # Are we doing down or up?
             if args.down:
-                node_count -= args.increment
+                node_count -= increment
             else:
-                node_count += args.increment
+                node_count += increment
 
             print(
-                f"⚖️ Iteration {iter}: scaling to {direction} by {args.increment}, from {old_size} to {node_count}"
+                f"⚖️ Iteration {iter}: scaling to {direction} by {increment}, from {old_size} to {node_count}"
             )
 
             # Scale the cluster - we should do similar logic for the GKE client (one function)
             start = time.time()
-            res = cli.scale(node_count)
+            cli.scale(node_count)
             end = time.time()
             seconds = round(end - start, 3)
             cli.times[f"scale_{tag}_{old_size}_to_{node_count}"] = seconds
             print(
-                f"📦️ Scaling from {old_size} to {node_count} took {seconds} seconds, and the cluster now has {res.initial_node_count} nodes!"
+                f"📦️ Scaling from {old_size} to {node_count} took {seconds} seconds, and the cluster now has {cli.node_count} nodes!"
             )
 
             # Save the times as we go
             print(json.dumps(cli.data, indent=4))
             cli.save(results_file)
+            increment = next_increment(node_count)
 
         # Delete the cluster and clean up
         cli.delete_cluster()
