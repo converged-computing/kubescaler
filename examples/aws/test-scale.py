@@ -106,8 +106,8 @@ def main():
             return 0
 
         # If we still have more than the iteration size,
-        # allow an iteration of that size
-        if node_count + args.increment <= args.max_node_count:
+        # allow an iteration of that size. This must be LESS THAN
+        if node_count + args.increment < args.max_node_count:
             return args.increment
 
         # Otherwise, return the difference (the largest step we can take)
