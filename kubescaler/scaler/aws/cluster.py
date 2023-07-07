@@ -24,6 +24,7 @@ from kubescaler.decorators import retry, timed
 from kubescaler.logger import logger
 
 from .ami import get_latest_ami
+from .decorators import refresh_session
 from .template import auth_config_data, vpc_template, workers_template
 from .token import get_bearer_token
 
@@ -82,11 +83,7 @@ class EKSCluster(Cluster):
         self._kubectl = None
 
         # Client connections
-        self.session = boto3.Session(region_name=self.region)
-        self.ec2 = self.session.client("ec2")
-        self.cf = self.session.client("cloudformation")
-        self.iam = self.session.client("iam")
-        self.eks = self.session.client("eks")
+        self.refresh_clients()
 
         # Will be set later!
         self.workers_stack = None
@@ -107,6 +104,16 @@ class EKSCluster(Cluster):
             raise ValueError(
                 f"{on_stack_failure} is not a valid option, choices are: {options}"
             )
+
+    def refresh_clients(self):
+        """
+        Given we hit some error, refresh all clients
+        """
+        self.session = boto3.Session(region_name=self.region)
+        self.ec2 = self.session.client("ec2")
+        self.cf = self.session.client("cloudformation")
+        self.iam = self.session.client("iam")
+        self.eks = self.session.client("eks")
 
     @timed
     def create_cluster(self):
@@ -207,6 +214,7 @@ class EKSCluster(Cluster):
         self.configuration = configuration
 
     @timed
+    @refresh_session
     def wait_for_nodes(self):
         """
         Wait for the nodes to be ready.
@@ -319,6 +327,7 @@ class EKSCluster(Cluster):
         os.chmod(self.keypair_file, 400)
         return key
 
+    @refresh_session
     def set_workers_stack(self):
         """
         Get or create the workers stack, or the nodes for the cluster.
@@ -351,6 +360,7 @@ class EKSCluster(Cluster):
         return self.delete_stack(self.vpc_name)
 
     @timed
+    @refresh_session
     def create_workers_stack(self):
         """
         Create the workers stack (the nodes for the EKS cluster)
@@ -398,6 +408,7 @@ class EKSCluster(Cluster):
         )
         return self._create_stack(stack, self.workers_name)
 
+    @refresh_session
     def new_cluster(self):
         """
         Create a new cluster.
@@ -432,6 +443,7 @@ class EKSCluster(Cluster):
             self.vpc_stack = self.create_vpc_stack()
 
     @timed
+    @refresh_session
     def create_vpc_stack(self):
         """
         Create a new stack from the template
@@ -446,6 +458,7 @@ class EKSCluster(Cluster):
         )
         return self._create_stack(stack, self.vpc_name)
 
+    @refresh_session
     def _create_stack(self, stack, stack_name):
         """
         Shared function to check validity of stack and wait!
@@ -472,6 +485,7 @@ class EKSCluster(Cluster):
         # Retrieve the same metadata if we had retrieved it
         return self.cf.describe_stacks(StackName=stack_name)
 
+    @refresh_session
     def delete_stack(self, stack_name):
         """
         Delete a stack and wait for it to be deleted
@@ -489,6 +503,7 @@ class EKSCluster(Cluster):
         except Exception:
             raise ValueError("Waiting for stack deletion exceeded wait time.")
 
+    @refresh_session
     def set_roles(self):
         """
         Create the default IAM arn role for the admin
@@ -500,6 +515,7 @@ class EKSCluster(Cluster):
             self.role = self.create_role()
         self.role_arn = self.role["Role"]["Arn"]
 
+    @refresh_session
     def create_role(self):
         """
         Create the role for eks
@@ -579,6 +595,7 @@ class EKSCluster(Cluster):
         return self.cluster_name + "-worker-group"
 
     @timed
+    @refresh_session
     def delete_cluster(self):
         """
         Delete the cluster
@@ -625,6 +642,7 @@ class EKSCluster(Cluster):
         }
 
     @retry
+    @refresh_session
     def scale(self, count):
         """
         Make a request to scale the cluster
