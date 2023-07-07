@@ -82,8 +82,8 @@ class EKSCluster(Cluster):
         self.configuration = None
         self._kubectl = None
 
-        # Client connections
-        self.refresh_clients()
+        # Client connections - use default botocore session
+        self.new_clients()
 
         # Will be set later!
         self.workers_stack = None
@@ -105,7 +105,7 @@ class EKSCluster(Cluster):
                 f"{on_stack_failure} is not a valid option, choices are: {options}"
             )
 
-    def refresh_clients(self):
+    def new_clients(self):
         """
         Given we hit some error, refresh all clients
         """
@@ -114,6 +114,29 @@ class EKSCluster(Cluster):
         self.cf = self.session.client("cloudformation")
         self.iam = self.session.client("iam")
         self.eks = self.session.client("eks")
+
+    def refresh_clients(self):
+        """
+        Refresh clients with a custom auth_token.
+
+        This is currently an experiment.
+        """
+        # Generate a new token
+        token = get_bearer_token(self.cluster_name, self.token_expires)
+
+        def new_boto_client(service_name):
+            # this call in boto3 passes forward to botocore, and we are providing a resfreshed auth token
+            # https://github.com/boto/boto3/blob/3c988a24f22795d3cb9cf26a74c085d2e6a58504/boto3/session.py#L217
+            return self.session._session.create_client(
+                service_name,
+                region_name=self.region,
+                aws_session_token=token["status"]["token"],
+            )
+
+        self.ec2 = new_boto_client("ec2")
+        self.cf = new_boto_client("cloudformation")
+        self.iam = new_boto_client("iam")
+        self.eks = new_boto_client("eks")
 
     @timed
     def create_cluster(self):
