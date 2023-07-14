@@ -6,7 +6,7 @@ import os
 import sys
 import time
 
-from kubescaler.scaler.aws import EKSCluster
+from kubescaler.scaler.aws import EKSClusterNodegroup
 from kubescaler.utils import read_json
 
 # Save data here
@@ -60,11 +60,10 @@ def get_parser():
     )
     return parser
 
-
 def main():
     """
     This experiment will test scaling a cluster, three times, each
-    time going from 2 nodes to 32. We want to understand if scaling is
+    time going from 1 nodes to 64. We want to understand if scaling is
     impacted by cluster size.
     """
     parser = get_parser()
@@ -137,6 +136,7 @@ def main():
 
     # Create 10 clusters, each going up to 32 nodes
     for iter in range(args.start_iter, args.iters):
+        total_experiment_time=time.time()
         results_file = os.path.join(outdir, f"scaling-{iter}.json")
 
         # Start at the max if we are going down, otherwise the starting count
@@ -144,12 +144,12 @@ def main():
         print(
             f"⭐️ Creating the initial cluster, iteration {iter} with size {node_count}..."
         )
-        cli = EKSCluster(
+        cli = EKSClusterNodegroup(
             name=cluster_name,
             node_count=node_count,
-            machine_type=args.machine_type,
-            min_nodes=args.min_node_count,
             max_nodes=args.max_node_count,
+            min_nodes=args.min_node_count,
+            machine_type=args.machine_type,
         )
         # Load a result if we have it
         if os.path.exists(results_file):
@@ -158,6 +158,10 @@ def main():
 
         # Create the cluster (this times it)
         cli.create_cluster()
+        
+        # getting the current # of nodes
+        # node_count = cli.get_current_number_of_nodes()
+        
         print(f"📦️ The cluster has {cli.node_count} nodes!")
 
         # Flip between functions to decide to keep going based on:
@@ -199,9 +203,11 @@ def main():
             print(json.dumps(cli.data, indent=4))
             cli.save(results_file)
             increment = next_increment(node_count)
+            print(f"Time Elased-{(time.time()-total_experiment_time)/60} m")   
         
         # Delete the cluster and clean up
         print(f"{experiment_name} is done. Deleting the cluster - {cluster_name}")
+        
         cli.delete_cluster()
         print(json.dumps(cli.data, indent=4))
         cli.save(results_file)
