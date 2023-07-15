@@ -52,11 +52,6 @@ class Cluster:
 
         # Easy way to save times
         self.times = {}
-
-        # Switch to decide weather we want to use cloudformation or eks managed nodegroup
-        # default is 0 which will use cloudformation, if sets to 1, it will use eks managed nodegroup
-        self.eks_nodegroup = eks_nodegroup
-
     def delete_cluster(self):
         """
         Delete the cluster

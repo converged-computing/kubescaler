@@ -816,11 +816,9 @@ class EKSCluster(Cluster):
                 continue
             except self.eks.exceptions.ResourceNotFoundException as e:
                 print(f"⏳️ Cluster likely already deleted: {e}")
-                logger.info(f"⏳️ Cluster likely already deleted: {e}")
                 return
             break
         print("⏳️ Cluster deletion started! Waiting...")
-        logger.info("⏳️ Cluster deletion started! Waiting...")
         waiter = self.eks.get_waiter("cluster_deleted")
         waiter.wait(name=self.cluster_name)
 
@@ -851,9 +849,9 @@ class EKSCluster(Cluster):
     def scale(self, count):
 
         if self.eks_nodegroup:
-            self._scale_using_eks_nodegroup(count)
-        else:
-            self._scale_using_cf(count)
+            return self._scale_using_eks_nodegroup(count)
+        
+        return self._scale_using_cf(count)
 
     @retry
     def _scale_using_cf(self, count):

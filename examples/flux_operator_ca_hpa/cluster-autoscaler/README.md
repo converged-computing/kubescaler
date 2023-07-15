@@ -1,7 +1,7 @@
 # Setting Up Cluster Autoscaler in EKS
 Run this script to create a cluster and a nodegroup with 1 instance. The node group will have necessary tags required for cluster autoscaling. 
 
-```sh
+```console
 cd ..
 python3 create-delete-k8s-cluster.py --min-node-count 1 --max-node-count 3 --machine-type m5.large
 ```
@@ -10,7 +10,7 @@ python3 create-delete-k8s-cluster.py --min-node-count 1 --max-node-count 3 --mac
 
 First, create the IAM OIDC Provider for the cluster. Follow this link for more details - [Link](https://docs.aws.amazon.com/eks/latest/userguide/enable-iam-roles-for-service-accounts.html). Grab the cluster name from the output
 
-```bash
+```console
 $ export cluster_name="kubernetes-flux-operator-hpa-ca-cluster"`
 
 $ oidc_id=$(aws eks describe-cluster --name $cluster_name --query "cluster.identity.oidc.issuer" --output text | cut -d '/' -f 5)`
@@ -20,26 +20,26 @@ $ eksctl utils associate-iam-oidc-provider --cluster $cluster_name --approve`
 
 Create a policy for the Service Account Role
 
-```bash
+```console
 $ aws iam create-policy --policy-name AmazonEKSClusterAutoscalerPolicy --policy-document file://AmazonEKSClusterAutoscalerPolicy.json`
 ```
 
 ### Create a Role and attach the policy - Follow for [More](https://docs.aws.amazon.com/eks/latest/userguide/associate-service-account-role.html#irsa-create-role)
 
 First, set account id and oidc_provider
-```bash
+```console
 $ account_id=$(aws sts get-caller-identity --query "Account" --output text)`
 
 $ oidc_provider=$(aws eks describe-cluster --name $cluster_name --region $AWS_REGION --query "cluster.identity.oidc.issuer" --output text | sed -e "s/^https:\/\///")
 ```
 
 Now, create role with the below command. keep a note of the role arn
-```bash
+```console
 $ aws iam create-role --role-name AmazonEKSClusterAutoscalerRole --assume-role-policy-document file://trust-relationship.json --description "AWS Iam role for cluster autoscaler"`
 ```
 
 Attach the policy we created earlier.
-```bash
+```console
 $ aws iam attach-role-policy --role-name AmazonEKSClusterAutoscalerRole --policy-arn=arn:aws:iam::$account_id:policy/AmazonEKSClusterAutoscalerPolicy`
 ```
 
