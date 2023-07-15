@@ -83,6 +83,8 @@ class EKSCluster(Cluster):
         self._kubectl = None
         self._kubectl_token_expiration = None
 
+        # switch for eks managed nodegroup or cloudformation
+        self.eks_nodegroup = kwargs.get("eks_nodegroup")
         # Client connections
         self.new_clients()
 
@@ -94,6 +96,10 @@ class EKSCluster(Cluster):
         self.vpc_subnet_public = None
         self.vpc_id = None
         self.set_roles()
+        if self.eks_nodegroup:
+            self.instance_role_name = "AmazonEKSNodeRole"
+            self.instance_role_arn = ""
+            self.set_node_role()
 
     def new_clients(self):
         self.session = boto3.Session(region_name=self.region)
@@ -157,7 +163,10 @@ class EKSCluster(Cluster):
         # The cluster is actually created with no nodes - just the control plane!
         # Here is where we create the workers, via a stack. Because apparently
         # AWS really likes their pancakes. 🥞️
-        self.set_workers_stack()
+        if self.eks_nodegroup:
+            self.set_or_create_nodegroup()
+        else:
+            self.set_workers_stack()
         self.create_auth_config()
 
         # We can only wait for the node group after we set the auth config!
@@ -226,6 +235,8 @@ class EKSCluster(Cluster):
         We do this separately to allow timing. This function would be improved if
         we didn't need subprocess, but the waiter doesn't seem to work.
         """
+        # subscribe to node event,
+        # minimize loads on k8s API
         kubectl = self.get_k8s_client()
         while True:
             print(f"⏱️ Waiting for {self.node_count} nodes to be Ready...")
@@ -253,7 +264,10 @@ class EKSCluster(Cluster):
         will (or I should say "should") work!
         """
         # Easier to write to file and then apply!
-        auth_config = auth_config_data % self.node_instance_role
+        if self.eks_nodegroup:
+            auth_config = auth_config_data % self.instance_role_arn
+        else:
+            auth_config = auth_config_data % self.node_instance_role
         utils.write_file(auth_config, self.auth_config_file)
         kubectl = self.get_k8s_client()
 
@@ -348,7 +362,16 @@ class EKSCluster(Cluster):
                 self.node_instance_role = output["OutputValue"]
             if output["OutputKey"] == "NodeAutoScalingGroup":
                 self.node_autoscaling_group_name = output["OutputValue"]
-
+    
+    def set_or_create_nodegroup(self):
+        """
+        Get or create the workers stack, or the nodes for the cluster.
+        """
+        try:
+            self.nodegroup = self.eks.describe_nodegroup(clusterName=self.cluster_name, nodegroupName=self.node_group_name)
+        except Exception:
+            self.nodegroup = self.create_nodegroup()
+    
     @timed
     def delete_workers_stack(self):
         """
@@ -410,6 +433,38 @@ class EKSCluster(Cluster):
             OnFailure=self.on_stack_failure
         )
         return self._create_stack(stack, self.workers_name)
+    
+    @timed
+    def create_nodegroup(self):
+        """
+        Create the EKS Managed Node Group (the nodes for the EKS cluster)
+        """
+        node_group = self.eks.create_nodegroup(
+            clusterName=self.cluster_name,
+            nodegroupName=self.node_group_name,
+            scalingConfig={
+                'minSize': self.min_nodes,
+                'maxSize': self.max_nodes,
+                'desiredSize': self.node_count
+            },
+            subnets=[str(subnet) for subnet in self.vpc_subnet_ids],
+            instanceTypes=[self.machine_type],
+            amiType="AL2_x86_64",
+            remoteAccess={
+                'ec2SshKey': self.keypair_name,
+                'sourceSecurityGroups': [
+                    self.vpc_security_group
+                ]
+            },
+            nodeRole=self.instance_role_arn,
+            tags={
+                'k8s.io/cluster-autoscaler/enabled': 'true',
+                'k8s.io/cluster-autoscaler/' + self.cluster_name: 'None'
+            },
+            capacityType='ON_DEMAND'
+        )
+        print(f"The status of nodegroup {node_group['nodegroup']['status']}")
+        return self._create_nodegroup(node_group, self.node_group_name)
 
     def new_cluster(self):
         """
@@ -485,6 +540,23 @@ class EKSCluster(Cluster):
         # Retrieve the same metadata if we had retrieved it
         return self.cf.describe_stacks(StackName=stack_name)
 
+    def _create_nodegroup(self, node_group, nodegroup_name):
+        if node_group is None:
+            raise ValueError("Could not create nodegroup")
+
+        try:
+            print(f"Waiting for {nodegroup_name} nodegroup...")
+            waiter = self.eks.get_waiter("nodegroup_active")
+            # MaxAttempts defaults to 120, and Delay 30 seconds
+            waiter.wait(clusterName=self.cluster_name, nodegroupName=nodegroup_name)
+        except Exception as e:
+            # Allow waiting 3 more minutes
+            print(f"Waiting for nodegroup creation exceeded wait time: {e}")
+            time.sleep(180)
+
+        # Retrieve the same metadata if we had retrieved it
+        return self.eks.describe_nodegroup(clusterName=self.cluster_name, nodegroupName=nodegroup_name)
+
     def delete_stack(self, stack_name):
         """
         Delete a stack and wait for it to be deleted
@@ -559,6 +631,61 @@ class EKSCluster(Cluster):
         )
 
         return role
+   
+    def set_node_role(self):
+        """
+        Create the default IAM arn role for the admin
+        """
+        try:
+            # See if role exists.
+            self.instance_role = self.iam.get_role(RoleName=self.instance_role_name)
+        except Exception:
+            self.instance_role = self.create_instance_role()
+        self.instance_role_arn = self.instance_role["Role"]["Arn"]
+
+    def create_instance_role(self):
+        """
+        Create the role for eks
+        """
+        # This is an AWS role policy document.  Allows access for EKS.
+        policy_doc = json.dumps(
+            {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Action": [
+                            "sts:AssumeRole"
+                            ],
+                        "Effect": "Allow",
+                        "Principal": {"Service": "ec2.amazonaws.com"},
+                    }
+                ],
+            }
+        )
+
+        # Create role and attach needed policies for EKS
+        role = self.iam.create_role(
+            RoleName=self.instance_role_name,
+            AssumeRolePolicyDocument=policy_doc,
+            Description="Role providing access to EKS resources from EKS",
+            MaxSessionDuration=36000
+        )
+
+        self.iam.attach_role_policy(
+            RoleName=self.instance_role_name,
+            PolicyArn="arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
+        )
+
+        self.iam.attach_role_policy(
+            RoleName=self.instance_role_name,
+            PolicyArn="arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
+        )
+        self.iam.attach_role_policy(
+            RoleName=self.instance_role_name,
+            PolicyArn="arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
+        )
+
+        return role
 
     def set_subnets(self):
         """
@@ -592,6 +719,23 @@ class EKSCluster(Cluster):
                 print(f"The stack-{self.workers_name} is {current_status}")
                 break
         return 1
+    
+    def wait_for_nodegroup_update(self, update_id):
+        while True:
+            response = self.eks.describe_update(
+                name=self.cluster_name,
+                updateId=update_id,
+                nodegroupName=self.node_group_name
+            )
+            current_status = response["update"]["status"]
+            if current_status == "InProgress":
+                print(f"The {self.node_group_name} is {current_status}")
+                time.sleep(5)
+                continue
+            else:
+                print(f"The {self.node_group_name} is {current_status}")
+                break
+        return 1
 
     @property
     def vpc_subnet_ids(self):
@@ -616,7 +760,28 @@ class EKSCluster(Cluster):
     @property
     def node_group_name(self):
         return self.cluster_name + "-worker-group"
-
+    
+    def delete_nodegroup(self, nodegroup_name):
+        """
+        Delete a stack and wait for it to be deleted
+        """
+        print(f"🥞️ Attempting delete of node group {nodegroup_name}...")
+        
+        try:
+            self.eks.delete_nodegroup(clusterName=self.cluster_name, nodegroupName=self.node_group_name)
+        except Exception:
+            logger.warning(f"Node Group {nodegroup_name} does not exist.")
+            return
+        
+        try:
+            logger.info(f"Waiting for {nodegroup_name} to be deleted..")
+            waiter = self.eks.get_waiter("nodegroup_deleted")
+            waiter.wait(clusterName=self.cluster_name, nodegroupName=self.node_group_name)
+        except Exception:
+            raise ValueError("Waiting for nodegroup deletion exceeded wait time.")
+        else:
+            print(f"Node group {nodegroup_name} is deleted successfully")
+        
     @timed
     def delete_cluster(self):
         """
@@ -627,7 +792,10 @@ class EKSCluster(Cluster):
         And let's go backwards - deleting first what we created last.
         """
         logger.info("🔨️ Deleting node workers...")
-        self.delete_workers_stack()
+        if self.eks_nodegroup:
+            self.delete_nodegroup(self.node_group_name)
+        else:
+            self.delete_workers_stack()
         # We could delete keypair, but let's keep for now, assuming could be reused elsewhere
         # and a deletion might be unexpected to the user
 
@@ -653,7 +821,10 @@ class EKSCluster(Cluster):
         # Delete the VPC stack and we are done!
         logger.info("🥅️ Deleting VPC and associated assets...")
         self.delete_vpc_stack()
-        self.delete_workers_stack()
+        if self.eks_nodegroup:
+            self.delete_nodegroup(self.node_group_name)
+        else:
+            self.delete_workers_stack()
         logger.info("⭐️ Done!")
 
     @property
@@ -724,6 +895,28 @@ class EKSCluster(Cluster):
         # waiter = self.cf.get_waiter('stack_update_complete')
         # waiter.wait(StackName=self.workers_name)
         self.wait_for_stack_updates()
+        # If successful, save new node count
+        self.node_count = count
+        self.wait_for_nodes()
+        return response
+
+    def scale_using_eks_nodegroup(self, count):
+        """
+        Make a request to scale the cluster
+        """
+        response = self.eks.update_nodegroup_config(
+            clusterName=self.cluster_name,
+            nodegroupName=self.node_group_name,
+            scalingConfig={
+                'minSize': self.min_nodes,
+                'maxSize': self.max_nodes,
+                'desiredSize': count
+            }
+        )
+        update_id = response["update"]["id"]
+
+        self.wait_for_nodegroup_update(update_id)
+
         # If successful, save new node count
         self.node_count = count
         self.wait_for_nodes()

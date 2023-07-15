@@ -53,6 +53,11 @@ def get_parser():
     )
     parser.add_argument("--machine-type", help="AWS machine type", default="m5.large")
     parser.add_argument(
+        "--eks-nodegroup", 
+        help="set 1 to use eks nodegroup for instances, otherwise, it'll use cloudformation stack",
+        type=int,
+        default=0)
+    parser.add_argument(
         "--increment", help="Increment by this value", type=int, default=1
     )
     parser.add_argument(
@@ -150,6 +155,7 @@ def main():
             machine_type=args.machine_type,
             min_nodes=args.min_node_count,
             max_nodes=args.max_node_count,
+            eks_nodegroup=args.eks_nodegroup
         )
         # Load a result if we have it
         if os.path.exists(results_file):
@@ -187,7 +193,10 @@ def main():
 
             # Scale the cluster - we should do similar logic for the GKE client (one function)
             start = time.time()
-            cli.scale(node_count)
+            if cli.eks_nodegroup:
+                cli.scale_using_eks_nodegroup(node_count)
+            else:
+                cli.scale(node_count)
             end = time.time()
             seconds = round(end - start, 3)
             cli.times[f"scale_{tag}_{old_size}_to_{node_count}"] = seconds

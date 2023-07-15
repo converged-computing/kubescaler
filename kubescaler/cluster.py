@@ -26,7 +26,8 @@ class Cluster:
         max_nodes=3,
         min_nodes=0,
         machine_type=None,
-        kubernetes_version=None
+        kubernetes_version=None,
+        eks_nodegroup=0
     ):
         """
         A simple class to control creating a cluster
@@ -52,6 +53,10 @@ class Cluster:
 
         # Easy way to save times
         self.times = {}
+
+        # Switch to decide weather we want to use cloudformation or eks managed nodegroup
+        # default is 0 which will use cloudformation, if sets to 1, it will use eks managed nodegroup
+        self.eks_nodegroup = eks_nodegroup
 
     def delete_cluster(self):
         """
