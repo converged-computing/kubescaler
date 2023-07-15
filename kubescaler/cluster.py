@@ -26,8 +26,7 @@ class Cluster:
         max_nodes=3,
         min_nodes=0,
         machine_type=None,
-        kubernetes_version=None,
-        eks_nodegroup=0
+        kubernetes_version=None
     ):
         """
         A simple class to control creating a cluster

@@ -16,3 +16,4 @@ __pycache__
 *kubeconfig.yaml
 *kubeconfig-*.yaml
 **/.DS_Store
+.vscode

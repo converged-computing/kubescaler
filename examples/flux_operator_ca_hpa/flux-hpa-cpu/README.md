@@ -1,6 +1,6 @@
 # Setting up Horizontal POD Autoscaling in Flux Operator.
 
-### Follow this link - [Flux Operator Elasticity](https://github.com/flux-framework/flux-operator/blob/24d54d7378d35d7a28e46bcf19fc74f796536f13/docs/tutorials/elasticity.md) for details setup and latest releases. This scripts is derived from the above link. Courtesy of @VannesaSochat
+### Follow this link - [Flux Operator Elasticity](https://github.com/flux-framework/flux-operator/blob/24d54d7378d35d7a28e46bcf19fc74f796536f13/docs/tutorials/elasticity.md) for details setup and latest releases. This scripts is derived from the above link. Courtesy of [@vsoch](https://github.com/vsoch)
 
 Quick Access Link
 1. [Flux Operator Elasticity](https://github.com/flux-framework/flux-operator/blob/24d54d7378d35d7a28e46bcf19fc74f796536f13/docs/tutorials/elasticity.md)

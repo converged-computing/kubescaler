@@ -31,7 +31,17 @@ def get_parser():
         default=1,
     )
     parser.add_argument("--machine-type", help="AWS machine type", default="m5.large")
-    parser.add_argument("--operation", help="create or delete Cluster", default="create")
+    parser.add_argument(
+        "--operation", 
+        help="create or delete Cluster", 
+        default="create",
+        const='create',
+        choices=['create', 'delete'])
+    parser.add_argument(
+        "--eks-nodegroup", 
+        action="store_true",
+        help="set this to use eks nodegroup for instances, otherwise, it'll use cloudformation stack",
+        default=False)
     return parser
 
 def main():
@@ -63,6 +73,7 @@ def main():
             max_nodes=args.max_node_count,
             min_nodes=args.min_node_count,
             machine_type=args.machine_type,
+            eks_nodegroup=args.eks_nodegroup
         )
     
 
@@ -75,9 +86,11 @@ def main():
         cluster_details = cli.create_cluster()
         print(f"OIDC Provider - {cluster_details['cluster']['identity']['oidc']['issuer']}")
         # utils.write_file(cluster_details, 'cluster-details.json')
-    else:
+    elif args.operation == "delete":
         print("⭐️ Deleting the cluster...")
         cli.delete_cluster()
+    else:
+        raise argparse.ArgumentError(args.operation, "Please specify a valid operation[creating or deleting] the cluster")
 
 
 if __name__ == "__main__":

@@ -1343,7 +1343,7 @@ spec:
         - --leader-elect
         command:
         - /manager
-        image: ghcr.io/flux-framework/flux-operator:latest
+        image: ghcr.io/flux-framework/flux-operator:latest@sha256:2d5e77dd82a186d409b984c7228a39e5b738d2993faa6bf87b8a6743b68d3b89
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
