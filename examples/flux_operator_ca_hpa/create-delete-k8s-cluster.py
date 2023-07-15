@@ -6,7 +6,7 @@ import time
 import json
 import kubescaler.utils as utils
 
-from kubescaler.scaler.aws import EKSClusterNodegroup
+from kubescaler.scaler.aws import EKSCluster
 
 
 def get_parser():
@@ -57,7 +57,7 @@ def main():
     cluster_name = f"{cluster_name}-{experiment_name}"
     print(f"📛️ Cluster name is {cluster_name}")
 
-    cli = EKSClusterNodegroup(
+    cli = EKSCluster(
             name=cluster_name,
             node_count=args.node_count,
             max_nodes=args.max_node_count,
