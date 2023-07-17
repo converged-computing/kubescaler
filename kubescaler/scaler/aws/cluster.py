@@ -295,7 +295,6 @@ class EKSCluster(Cluster):
         kubectl = self.get_k8s_client()
         watcher = watch.Watch()
         kubernetes_nodes = {}
-        start = time.time()
         for event in watcher.stream(kubectl.list_node):
             print(f"⏱️ Waiting for {count} nodes to be Ready...")
             raw_object = event['raw_object']  # raw_object is a dict
@@ -314,7 +313,6 @@ class EKSCluster(Cluster):
                 watcher.stop()
             if not self._stack_update_complete:
                 watcher.stop()
-        print(f"Time for kubernetes to get nodes - {time.time()-start}")
         return len(kubernetes_nodes.keys())
         
     def create_auth_config(self):
@@ -769,7 +767,6 @@ class EKSCluster(Cluster):
     
     @timed
     def wait_for_stack_updates(self):
-        start = time.time()
         while True:
             stack_update = self.cf.describe_stacks(
                 StackName=self.workers_name
@@ -783,7 +780,6 @@ class EKSCluster(Cluster):
                 print(f"The stack-{self.workers_name} is {current_status}")
                 break
             time.sleep(5)
-        print(f"Time for stack update to complete - {time.time()-start}")
     
     @timed
     def wait_for_nodegroup_update(self, update_id):
