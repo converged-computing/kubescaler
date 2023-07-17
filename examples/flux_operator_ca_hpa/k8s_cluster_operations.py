@@ -8,7 +8,6 @@ import kubescaler.utils as utils
 
 from kubescaler.scaler.aws import EKSCluster
 
-
 def get_parser():
     parser = argparse.ArgumentParser(
         description="K8s Cluster Creator / Destroyer!",
@@ -32,17 +31,19 @@ def get_parser():
     )
     parser.add_argument("--machine-type", help="AWS machine type", default="m5.large")
     parser.add_argument(
-        "--operation", 
-        help="create or delete Cluster", 
+        "--operation",
+        help="create or delete Cluster",
         default="create",
         const='create',
-        choices=['create', 'delete'])
+        nargs='?',
+        choices=['create', 'delete', 'scale'])
     parser.add_argument(
-        "--eks-nodegroup", 
+        "--eks-nodegroup",
         action="store_true",
         help="set this to use eks nodegroup for instances, otherwise, it'll use cloudformation stack",
         default=False)
     return parser
+
 
 def main():
     """
@@ -68,29 +69,31 @@ def main():
     print(f"📛️ Cluster name is {cluster_name}")
 
     cli = EKSCluster(
-            name=cluster_name,
-            node_count=args.node_count,
-            max_nodes=args.max_node_count,
-            min_nodes=args.min_node_count,
-            machine_type=args.machine_type,
-            eks_nodegroup=args.eks_nodegroup
-        )
-    
+        name=cluster_name,
+        node_count=args.node_count,
+        max_nodes=args.max_node_count,
+        min_nodes=args.min_node_count,
+        machine_type=args.machine_type,
+        eks_nodegroup=args.eks_nodegroup
+    )
 
     if args.operation == "create":
-
-        print(
-            f"⭐️ Creating the cluster sized {args.min_node_count} to {args.max_node_count}..."
-        )
-        
+        print(f"⭐️ Creating the cluster sized {args.min_node_count} to {args.max_node_count}...")
         cluster_details = cli.create_cluster()
         print(f"OIDC Provider - {cluster_details['cluster']['identity']['oidc']['issuer']}")
-        # utils.write_file(cluster_details, 'cluster-details.json')
     elif args.operation == "delete":
         print("⭐️ Deleting the cluster...")
         cli.delete_cluster()
+    elif args.operation == "scale":
+        print(f"Adding/Removing {args.node_count} from the cluster - {cluster_name}")
+        cluster_details = cli.load_cluster_info()
+        if not cluster_details:
+            exit()
+        
+        cli.scale(args.node_count)
     else:
-        raise argparse.ArgumentError(args.operation, "Please specify a valid operation[creating or deleting] the cluster")
+        raise argparse.ArgumentError(
+            args.operation, "Please specify a valid operations the cluster")
 
 
 if __name__ == "__main__":

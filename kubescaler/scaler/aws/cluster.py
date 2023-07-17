@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 from datetime import datetime, timedelta
+import threading
 
 try:
     import boto3
@@ -18,6 +19,7 @@ except ImportError:
 
 from kubernetes import client as k8s
 from kubernetes import utils as k8sutils
+from kubernetes import watch
 
 import kubescaler.utils as utils
 from kubescaler.cluster import Cluster
@@ -87,6 +89,7 @@ class EKSCluster(Cluster):
         self.configuration = None
         self._kubectl = None
         self._kubectl_token_expiration = None
+        self._stack_update_complete = True
 
         # switch for eks managed nodegroup or cloudformation
         self.eks_nodegroup = eks_nodegroup
@@ -172,6 +175,7 @@ class EKSCluster(Cluster):
             self.set_or_create_nodegroup()
         else:
             self.set_workers_stack()
+        
         self.create_auth_config()
 
         # We can only wait for the node group after we set the auth config!
@@ -181,6 +185,31 @@ class EKSCluster(Cluster):
 
         print(f"🦊️ Writing config file to {self.kube_config_file}")
         print(f"  Usage: kubectl --kubeconfig={self.kube_config_file} get nodes")
+        return self.cluster
+
+    def load_cluster_info(self):
+        self.set_vpc_stack()
+        self.set_subnets()
+
+        try:
+            self.cluster = self.eks.describe_cluster(name=self.cluster_name)
+        except Exception:
+            print(f"Cluster - {self.cluster_name} does not exist")
+            return None
+
+        # Get cluster endpoint and security info so we can make kubectl config
+        self.certificate = self.cluster["cluster"]["certificateAuthority"]["data"]
+        self.endpoint = self.cluster["cluster"]["endpoint"]
+
+        # Ensure we have a config to interact with, and write the keypair file
+        self.ensure_kube_config()
+        self.get_keypair()
+
+        if self.eks_nodegroup:
+            self.set_or_create_nodegroup()
+        else:
+            self.set_workers_stack()
+
         return self.cluster
 
     def get_k8s_client(self):
@@ -241,8 +270,7 @@ class EKSCluster(Cluster):
         We do this separately to allow timing. This function would be improved if
         we didn't need subprocess, but the waiter doesn't seem to work.
         """
-        # subscribe to node event,
-        # minimize loads on k8s API
+        start = time.time()
         kubectl = self.get_k8s_client()
         while True:
             print(f"⏱️ Waiting for {self.node_count} nodes to be Ready...")
@@ -256,12 +284,39 @@ class EKSCluster(Cluster):
                         ready_count += 1
             if ready_count >= self.node_count:
                 break
-
+        print(f"Time for kubernetes to get nodes - {time.time()-start}")
         return ready_count
         # The waiter doesn't seem to work - so we call kubectl until it's ready
         # waiter = self.eks.get_waiter("nodegroup_active")
         # waiter.wait(clusterName=self.cluster_name, nodegroupName=self.node_autoscaling_group_name)
+    
+    @timed
+    def watch_for_new_nodes(self, count):
+        kubectl = self.get_k8s_client()
+        watcher = watch.Watch()
+        kubernetes_nodes = {}
+        start = time.time()
+        for event in watcher.stream(kubectl.list_node):
+            print(f"⏱️ Waiting for {count} nodes to be Ready...")
+            raw_object = event['raw_object']  # raw_object is a dict
 
+            name = raw_object['metadata']['name']
+            
+            conditions = raw_object['status']['conditions']
+            for condition in conditions:
+                if condition['type'] == 'Ready' and condition['status'] == 'True':
+                    if name not in kubernetes_nodes.keys():
+                        kubernetes_nodes[name] = {}
+                    
+                    kubernetes_nodes[name]['status'] = True
+
+            if len(kubernetes_nodes.keys()) == count:
+                watcher.stop()
+            if not self._stack_update_complete:
+                watcher.stop()
+        print(f"Time for kubernetes to get nodes - {time.time()-start}")
+        return len(kubernetes_nodes.keys())
+        
     def create_auth_config(self):
         """
         Deploy a config map that tells the master how to contact the workers
@@ -711,8 +766,10 @@ class EKSCluster(Cluster):
                 self.vpc_subnet_public = output["OutputValue"].split(",")
             if output["OutputKey"] == "SubnetsPrivate":
                 self.vpc_subnet_private = output["OutputValue"].split(",")
-
+    
+    @timed
     def wait_for_stack_updates(self):
+        start = time.time()
         while True:
             stack_update = self.cf.describe_stacks(
                 StackName=self.workers_name
@@ -720,12 +777,15 @@ class EKSCluster(Cluster):
             current_status = stack_update["Stacks"][0]["StackStatus"]
             if "PROGRESS" in current_status:
                 print(f"The stack-{self.workers_name} is {current_status}")
-                time.sleep(5)
-                continue
+            elif "FAILED" in current_status:
+                self._stack_update_complete = False
             else:
                 print(f"The stack-{self.workers_name} is {current_status}")
                 break
-
+            time.sleep(5)
+        print(f"Time for stack update to complete - {time.time()-start}")
+    
+    @timed
     def wait_for_nodegroup_update(self, update_id):
         while True:
             response = self.eks.describe_update(
@@ -736,11 +796,12 @@ class EKSCluster(Cluster):
             current_status = response["update"]["status"]
             if current_status == "InProgress":
                 print(f"The {self.node_group_name} is {current_status}")
-                time.sleep(5)
-                continue
+            elif current_status == 'Failed' or current_status == 'Cancelled':
+                self._stack_update_complete = False
             else:
                 print(f"The {self.node_group_name} is {current_status}")
                 break
+            time.sleep(5)
 
     @property
     def vpc_subnet_ids(self):
@@ -900,15 +961,23 @@ class EKSCluster(Cluster):
                 },
             ],
         )
-
         # Wait for stack update to be complete. Note this does not seem
         # to work. Instead we update the node count and then wait for the nodes.
         # waiter = self.cf.get_waiter('stack_update_complete')
         # waiter.wait(StackName=self.workers_name)
-        self.wait_for_stack_updates()
+        self._stack_update_complete = True
+        stack_update_thread = threading.Thread(target=self.wait_for_stack_updates)
+        wait_for_node_thread = threading.Thread(target=self.watch_for_new_nodes, args=(count,))
+
+        stack_update_thread.start()
+        wait_for_node_thread.start()
+
+        stack_update_thread.join()
+        wait_for_node_thread.join()
+        # self.wait_for_stack_updates()
         # If successful, save new node count
         self.node_count = count
-        self.wait_for_nodes()
+        # self.wait_for_nodes()
         return response
 
     def _scale_using_eks_nodegroup(self, count):
@@ -926,9 +995,17 @@ class EKSCluster(Cluster):
         )
         update_id = response["update"]["id"]
 
-        self.wait_for_nodegroup_update(update_id)
+        # self.wait_for_nodegroup_update(update_id)
+        self._stack_update_complete = True
+        stack_update_thread = threading.Thread(target=self.wait_for_nodegroup_update, args=(update_id))
+        wait_for_node_thread = threading.Thread(target=self.watch_for_new_nodes, args=(count,))
 
+        stack_update_thread.start()
+        wait_for_node_thread.start()
+
+        stack_update_thread.join()
+        wait_for_node_thread.join()
         # If successful, save new node count
         self.node_count = count
-        self.wait_for_nodes()
+        # self.wait_for_nodes()
         return response
