@@ -165,7 +165,7 @@ spec:
             - --skip-nodes-with-local-storage=false
             - --expander=least-waste
             - --scale-down-unneeded-time=5m
-            - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,kubernetes.io/cluster/kubernetes-flux-operator-hpa-ca-cluster
+            - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,kubernetes.io/cluster/<cluster-name>
           volumeMounts:
             - name: ssl-certs
               mountPath: /etc/ssl/certs/ca-certificates.crt # /etc/ssl/certs/ca-bundle.crt for Amazon Linux Worker Nodes

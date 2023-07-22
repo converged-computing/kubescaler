@@ -1,4 +1,4 @@
-# Setting up Horizontal Pod Autoscaling in Flux Operator Mini Cluster.
+# Horizontal Pod Autoscaling in Flux Operator Mini Cluster.
 
 Follow this link - [Flux Operator Elasticity](https://github.com/flux-framework/flux-operator/blob/24d54d7378d35d7a28e46bcf19fc74f796536f13/docs/tutorials/elasticity.md) for details setup and latest releases. This scripts is derived from the above link. Courtesy of [@vsoch](https://github.com/vsoch)
 
@@ -12,32 +12,6 @@ exporter running inside of an instance to interact with it. This small set of tu
 based on CPU, and then one based on custom metrics.
 
  **[Tutorial File](https://github.com/flux-framework/flux-operator/blob/main/examples/elasticity/horizontal-autoscaler/v2-cpu/minicluster.yaml)**
-
-### Flux Operator Mini Cluster Setup
-
-Create the flux-operator namespace and install the operator:
-
-```bash
-$ kubectl create namespace flux-operator
-$ kubectl apply -f flux-operator.yaml
-```
-
-And then create a very simply interactive cluster (it's small, 2 pods, but importantly has a maxsize of 10).
-Note that we are going to limit the HPA to a size of 4, because we assume you are running on an average desktop computer.
-
-```bash
-$ kubectl apply -f ./minicluster.yaml
-```
-
-You'll need to wait for the container to pull (status `ContainerCreating` to `Running`).
-At this point, wait until the containers go from creating to running.
-
-```bash
-$ kubectl get -n flux-operator pods
-NAME                  READY   STATUS    RESTARTS   AGE
-flux-sample-0-4wmmp   1/1     Running   0          6m50s
-flux-sample-1-mjj7b   1/1     Running   0          6m50s
-```
 
 Look at the scale endpoint of the MiniCluster with `kubectl` directly! Remember that we haven't installed a horizontal auto-scaler yet:
 
