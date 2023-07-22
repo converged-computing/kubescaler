@@ -1,10 +1,9 @@
-# Setting up Horizontal POD Autoscaling in Flux Operator.
+# Setting up Horizontal Pod Autoscaling in Flux Operator Mini Cluster.
 
-### Follow this link - [Flux Operator Elasticity](https://github.com/flux-framework/flux-operator/blob/24d54d7378d35d7a28e46bcf19fc74f796536f13/docs/tutorials/elasticity.md) for details setup and latest releases. This scripts is derived from the above link. Courtesy of [@vsoch](https://github.com/vsoch)
+Follow this link - [Flux Operator Elasticity](https://github.com/flux-framework/flux-operator/blob/24d54d7378d35d7a28e46bcf19fc74f796536f13/docs/tutorials/elasticity.md) for details setup and latest releases. This scripts is derived from the above link. Courtesy of [@vsoch](https://github.com/vsoch)
 
 Quick Access Link
 1. [Flux Operator Elasticity](https://github.com/flux-framework/flux-operator/blob/24d54d7378d35d7a28e46bcf19fc74f796536f13/docs/tutorials/elasticity.md)
-
 
 ### Horizontal Autoscaler (v2) Example
 
@@ -14,7 +13,7 @@ based on CPU, and then one based on custom metrics.
 
  **[Tutorial File](https://github.com/flux-framework/flux-operator/blob/main/examples/elasticity/horizontal-autoscaler/v2-cpu/minicluster.yaml)**
 
-#### Setup
+### Flux Operator Mini Cluster Setup
 
 Create the flux-operator namespace and install the operator:
 
@@ -42,9 +41,10 @@ flux-sample-1-mjj7b   1/1     Running   0          6m50s
 
 Look at the scale endpoint of the MiniCluster with `kubectl` directly! Remember that we haven't installed a horizontal auto-scaler yet:
 
-```bash
+```console
 $ kubectl get --raw /apis/flux-framework.org/v1alpha1/namespaces/flux-operator/miniclusters/flux-sample/scale | jq
 ```
+
 ```console
 {
   "kind": "Scale",
@@ -71,6 +71,7 @@ The output above is also telling us the `autoscaler/v1` is being used, which I u
 means I could not use autoscaler/v2, but they seem to work OK (note that autoscaler/v2 is
 installed to my current cluster with Kubernetes 1.27).
 
+### HPA Setup
 Before we deploy any autoscaler, we need a metrics server! This doesn't come out of the box with kind so
 we install it: 
 Note: You can look at aws documentation [here](https://docs.aws.amazon.com/eks/latest/userguide/metrics-server.html)
@@ -91,7 +92,7 @@ $ kubectl get deploy,svc -n kube-system | egrep metrics-server
 This first autoscaler will work based on CPU. We can create it as follows:
 
 
-```bash
+```console
 $ kubectl apply -f hpa-cpu.yaml
 ```
 ```console

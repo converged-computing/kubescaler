@@ -1,14 +1,14 @@
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  labels:
-    k8s-addon: cluster-autoscaler.addons.k8s.io
-    k8s-app: cluster-autoscaler
-  annotations: 
-    eks.amazonaws.com/role-arn: arn:aws:iam::<account-id>:role/AmazonEKSClusterAutoscalerRole
-  name: cluster-autoscaler
-  namespace: kube-system
+# ---
+# apiVersion: v1
+# kind: ServiceAccount
+# metadata:
+#   labels:
+#     k8s-addon: cluster-autoscaler.addons.k8s.io
+#     k8s-app: cluster-autoscaler
+#   annotations: 
+#     eks.amazonaws.com/role-arn: arn:aws:iam::633731392008:role/AmazonEKSClusterAutoscalerRole
+#   name: cluster-autoscaler
+#   namespace: kube-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -152,18 +152,19 @@ spec:
           name: cluster-autoscaler
           resources:
             limits:
-              cpu: 100m
+              cpu: 500m
               memory: 600Mi
             requests:
               cpu: 100m
               memory: 600Mi
           command:
             - ./cluster-autoscaler
-            - --v=4
+            - --v=1
             - --stderrthreshold=info
             - --cloud-provider=aws
             - --skip-nodes-with-local-storage=false
             - --expander=least-waste
+            - --scale-down-unneeded-time=5m
             - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,kubernetes.io/cluster/kubernetes-flux-operator-hpa-ca-cluster
           volumeMounts:
             - name: ssl-certs

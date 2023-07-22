@@ -1,0 +1,62 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: cluster-with-karpenter
+  region: us-east-2
+  version: '1.26'
+  tags:
+    karpenter.sh/discovery: cluster-with-karpenter
+availabilityZones: ["us-east-2b", "us-east-2c"]
+
+iam:
+  withOIDC: true
+  serviceAccounts:
+  - metadata:
+      name: cluster-autoscaler
+      namespace: kube-system
+    attachPolicy:
+      version: "2012-10-17"
+      Statement:
+      - Effect: Allow
+        Action:
+          - "autoscaling:DescribeAutoScalingGroups"
+          - "autoscaling:DescribeAutoScalingInstances"
+          - "autoscaling:DescribeLaunchConfigurations"
+          - "autoscaling:DescribeTags"
+          - "autoscaling:SetDesiredCapacity"
+          - "autoscaling:TerminateInstanceInAutoScalingGroup"
+          - "ec2:DescribeLaunchTemplateVersions"
+        Resource: '*'
+      - Effect: Allow
+        Action:
+          - "autoscaling:SetDesiredCapacity"
+          - "autoscaling:TerminateInstanceInAutoScalingGroup"
+          - "ec2:DescribeImages"
+          - "ec2:GetInstanceTypesFromInstanceRequirements"
+          - "eks:DescribeNodegroup"
+        Resource: '*'
+
+
+karpenter:
+  version: 'v0.20.0' # Exact version must be provided
+  createServiceAccount: true # default is false
+  withSpotInterruptionQueue: true # adds all required policies and rules for supporting Spot Interruption Queue, default is false
+
+managedNodeGroups:
+  - name: workers
+    availabilityZones: ["us-east-2b"]
+    instanceType: hpc6a.48xlarge
+    minSize: 1
+    maxSize: 10
+    desiredCapacity: 1
+    efaEnabled: true
+    placement:
+      groupName: eks-efa-testing
+    iam:
+      withAddonPolicies:
+        autoScaler: true
+    labels: { "flux-operator": "true" }
+    ssh:
+      allow: true
+      publicKeyPath: ~/.ssh/id_rsa.pub
