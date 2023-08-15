@@ -2,7 +2,7 @@
 
 from kubernetes import client as k8s
 from kubernetes import watch, config
-from datetime import datetime
+from datetime import datetime,timezone
 import json
 import os 
 import argparse
@@ -17,13 +17,13 @@ here = os.path.dirname(os.path.abspath(__file__))
 data = os.path.join(here, "data")
 
 def datetime_utcnow_str():
-    return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 def str_to_datetime(datetime_str_obj):
-    return datetime.strptime(datetime_str_obj, "%Y-%m-%dT%H:%M:%SZ")
+    return datetime.strptime(datetime_str_obj, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
 
-def watch_for_pod_events(k8s_client, output_dir, namespace='flux-operator'):
-    
+def watch_for_pod_events(k8s_client, output_dir, namespace='flux-operator', outdir=None):
+    index = 0
     pods_for_flux = {}
     watcher = watch.Watch()
     for event in watcher.stream(func=k8s_client.list_namespaced_pod, namespace=namespace):
@@ -33,6 +33,9 @@ def watch_for_pod_events(k8s_client, output_dir, namespace='flux-operator'):
 
         name = raw_object["metadata"]["name"]
         status = raw_object['status']
+
+        # temporary save all objects for inspection. 
+        utils.write_json(raw_object, os.path.join(outdir, f"{name}-{event_type}-{str(index)}.json"))
 
         if event_type == "ADDED":
             pods_for_flux[name] = {}
@@ -49,7 +52,7 @@ def watch_for_pod_events(k8s_client, output_dir, namespace='flux-operator'):
                 if condition['type'] == 'PodScheduled' and condition['status'] == 'True' and (not pods_for_flux[name]["waiting_for_scheduled"]["current_status"]):
                     pods_for_flux[name]["waiting_for_scheduled"]["current_status"] = True
                     pods_for_flux[name]['waiting_for_scheduled']['end'] = datetime_utcnow_str()
-                    pods_for_flux[name]['waiting_for_scheduled']['duration'] = (datetime.utcnow() - str_to_datetime(pods_for_flux[name]['waiting_for_scheduled']['start'])).total_seconds()
+                    pods_for_flux[name]['waiting_for_scheduled']['duration'] = (datetime.now(tz=timezone.utc) - str_to_datetime(pods_for_flux[name]['waiting_for_scheduled']['start'])).total_seconds()
                 elif condition['type'] == 'Initialized':
                     pass
                 elif condition['type'] == 'Ready':
@@ -62,14 +65,14 @@ def watch_for_pod_events(k8s_client, output_dir, namespace='flux-operator'):
                     if container_status["name"] == "flux-sample" and container_status["ready"] == True and (not pods_for_flux[name]["waiting_for_container"]["current_status"]):
                         pods_for_flux[name]["waiting_for_container"]["current_status"] = True
                         pods_for_flux[name]["waiting_for_container"]["end"] = datetime_utcnow_str()
-                        pods_for_flux[name]["waiting_for_container"]["duration"] = (datetime.utcnow() - str_to_datetime(pods_for_flux[name]["waiting_for_container"]["start"])).total_seconds()
-        elif event_type == "DELETED":
-            
+                        pods_for_flux[name]["waiting_for_container"]["duration"] = (datetime.now(tz=timezone.utc) - str_to_datetime(pods_for_flux[name]["waiting_for_container"]["start"])).total_seconds()
+        
+        elif event_type == "DELETED":    
             for container_status in status["containerStatuses"]:
                 pods_for_flux[name]["pod_started"] =  container_status['state']['terminated']["startedAt"]
                 pods_for_flux[name]["pod_finished"] =  container_status['state']['terminated']["finishedAt"]
                 pods_for_flux[name]["pod_container_duration"] = (str_to_datetime(pods_for_flux[name]["pod_finished"]) - str_to_datetime(pods_for_flux[name]["pod_started"])).total_seconds()
-        
+        index += 1
         utils.write_json(pods_for_flux, output_dir)
         print(f"🫛 POD Event")
 
@@ -105,7 +108,7 @@ def watch_hpa_events(autoscaling_v2, output_dir, namespace='flux-operator'):
 
         event_data.append(event_dict)
         utils.write_json(event_data, output_dir)
-        print(f"↔️  POD Autoscaler events..")
+        print(f"↔️ ↔️ HPA Autoscaler events..")
 
 def get_parser():
     parser = argparse.ArgumentParser(
@@ -117,6 +120,7 @@ def get_parser():
     parser.add_argument("--hpa-namespace", help="Namespace of the horizontal pod autoscaler", default="flux-operator")
     parser.add_argument("--kubeconfig", help="kubernetes config file name, full path if the file is not in the current directory", default='kubeconfig-aws.yaml')
     parser.add_argument("--outdir", help="Path for the experimental results", default=data)
+    parser.add_argument("--filedir", help="Directory name for the experiment", default=None)
     return parser
 
 
@@ -127,24 +131,27 @@ def main():
     args, _ = parser.parse_known_args()
 
     # loading kubernetes config file and initializing client
-    config.load_kube_config(config_file=args.kubeconfig)
+    # config.load_kube_config(config_file=args.kubeconfig)
+    config.load_kube_config()
     coreV1 = k8s.CoreV1Api()
     autoscalingV2 = k8s.AutoscalingV2Api()
 
     experiment_name = 'kubernetes-pods-ca-hpa'
-
-    outdir = os.path.join(args.outdir, experiment_name, datetime_utcnow_str())
+    if args.filedir:
+        outdir = os.path.join(args.outdir, experiment_name, args.filedir)
+    else:
+        outdir = os.path.join(args.outdir, experiment_name, datetime_utcnow_str())
     if not os.path.exists(outdir):
         print(f"📁️ Creating output directory {outdir}")
         os.makedirs(outdir)
 
     pods_event_file = os.path.join(outdir, f"{args.flux_namespace}-pods-events.json")
-    ca_events_logs = os.path.join(outdir, f"{args.autoscaler_namespace}-events.logs")
+    ca_events_logs = os.path.join(outdir, f"{args.autoscaler_namespace}-ca-events.logs")
     hpa_events_file = os.path.join(outdir, f"{args.hpa_namespace}-hpa-status-events.json")
 
     print(f"🍥 Starting the threads for collecting data")
 
-    pod_events_thread = threading.Thread(target=watch_for_pod_events, args=(coreV1, pods_event_file, args.flux_namespace))
+    pod_events_thread = threading.Thread(target=watch_for_pod_events, args=(coreV1, pods_event_file, args.flux_namespace, outdir))
     ca_events_thread = threading.Thread(target=watch_cluster_autoscaler, args=(coreV1, ca_events_logs, args.autoscaler_namespace))
     hpa_events_thread = threading.Thread(target=watch_hpa_events, args=(autoscalingV2, hpa_events_file, args.hpa_namespace))
     

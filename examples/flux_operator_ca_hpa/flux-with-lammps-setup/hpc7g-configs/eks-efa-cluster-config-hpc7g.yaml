@@ -1,8 +1,8 @@
 apiVersion: eksctl.io/v1alpha5
 kind: ClusterConfig
 
-metadata:
-  name: scaling-study-efa
+metadata: 
+  name: scaling-study-efa-hossen1-08142023
   region: us-east-1
   version: "1.27"
 
@@ -28,22 +28,22 @@ iam:
 
 availabilityZones: ["us-east-1a", "us-east-1b"]
 managedNodeGroups:
-  - name: workers
+  - name: scaling-study-efa-hossen1-08142023
     availabilityZones: ["us-east-1a"]
     instanceType: hpc7g.16xlarge
-    minSize: 1
-    maxSize: 10
-    desiredCapacity: 1
+    minSize: 8
+    maxSize: 50
+    desiredCapacity: 8
     efaEnabled: true
-    iam:
-      withAddonPolicies:
-        autoScaler: true
     placement:
       groupName: eks-efa-testing
     labels: { "flux-operator": "true" }
     tags:
       k8s.io/cluster-autoscaler/enabled: "true"
       k8s.io/cluster-autoscaler/scaling-study-efa: "owned"
+      Name: 'scaling-study-efa-hossen1-08142023'
+    propagateASGTags: true
     ssh:
       allow: true
       publicKeyPath: ~/.ssh/id_rsa.pub
+    

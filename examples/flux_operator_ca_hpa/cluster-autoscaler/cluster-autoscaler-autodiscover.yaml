@@ -159,13 +159,13 @@ spec:
               memory: 600Mi
           command:
             - ./cluster-autoscaler
-            - --v=1
+            - --v=2
             - --stderrthreshold=info
             - --cloud-provider=aws
             - --skip-nodes-with-local-storage=false
             - --expander=least-waste
-            - --scale-down-unneeded-time=5m
-            - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,kubernetes.io/cluster/<cluster-name>
+            - --scale-down-unneeded-time=2m
+            - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,kubernetes.io/cluster/scaling-study-efa-hossen1-08142023
           volumeMounts:
             - name: ssl-certs
               mountPath: /etc/ssl/certs/ca-certificates.crt # /etc/ssl/certs/ca-bundle.crt for Amazon Linux Worker Nodes

@@ -51,7 +51,7 @@ def get_parser():
         type=int,
         default=0,
     )
-    parser.add_argument("--machine-type", help="AWS machine type", default="m5.large")
+    parser.add_argument("--machine-type", help="AWS machine type", default="hpc6a.48xlarge")
     parser.add_argument(
         "--eks-nodegroup", 
         action="store_true",
@@ -207,7 +207,7 @@ def main():
             increment = next_increment(node_count)
         
         # Delete the cluster and clean up
-        print(f"{experiment_name} is done. Deleting the cluster - {cluster_name}")
+        print(f"⚔️ Deleting the cluster - {cluster_name}")
         cli.delete_cluster()
         print(json.dumps(cli.data, indent=4))
         cli.save(results_file)

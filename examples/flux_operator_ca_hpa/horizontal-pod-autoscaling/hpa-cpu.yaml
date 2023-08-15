@@ -8,13 +8,12 @@ spec:
     apiVersion: flux-framework.org/v1alpha1
     kind: MiniCluster
     name: flux-sample
-  minReplicas: 2
-  maxReplicas: 4
+  minReplicas: 8
+  maxReplicas: 16
   metrics:
   - type: Resource
     resource:
       name: cpu
-      # This is explicitly set to be very low so it triggers
       target:
         type: Utilization
-        averageUtilization: 2
+        averageUtilization: 80

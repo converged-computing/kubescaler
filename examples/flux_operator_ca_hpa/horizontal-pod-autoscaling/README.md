@@ -50,8 +50,8 @@ Before we deploy any autoscaler, we need a metrics server! This doesn't come out
 we install it: 
 Note: You can look at aws documentation [here](https://docs.aws.amazon.com/eks/latest/userguide/metrics-server.html)
 
-```bash
-$ kubectl apply -f metrics-server.yaml
+```console
+$ kubectl apply -f horizontal-pod-autoscaling/metrics-server.yaml
 ```
 
 I found this suggestion [here](https://gist.github.com/sanketsudake/a089e691286bf2189bfedf295222bd43). Ensure
@@ -67,9 +67,7 @@ This first autoscaler will work based on CPU. We can create it as follows:
 
 
 ```console
-$ kubectl apply -f hpa-cpu.yaml
-```
-```console
+$ kubectl apply -f horizontal-pod-autoscaling/hpa-cpu.yaml
 horizontalpodautoscaler.autoscaling/flux-sample-hpa created
 ```
 

@@ -6,12 +6,13 @@ metadata:
 spec:
 
   # Number of pods to create for MiniCluster
-  size: 1
+  size: 2
+  maxSize: 16
 
   # This doesn't matter so much in interactive mode, tasks specified with the job
   # 12 * 64
-  tasks: 64
-
+  # tasks: 128
+  
   # This starts the flux broker without a command (interactive)
   interactive: true
   logging:
@@ -24,16 +25,18 @@ spec:
   flux:
     installRoot: /opt/view    
     optionFlags: "-ompi=openmpi@5 -c 1 -o cpu-affinity=per-task" 
+    scheduler:
+      queuePolicy: easy
 
-  containers:
+  containers: 
     - # image: ghcr.io/rse-ops/flux-arm-lammps:june-2023-arm64
       # spack 0.19 with a custom package.py that has updated libfabric
       image: ghcr.io/rse-ops/flux-arm-lammps:libfabric-1.18.1
       workingDir: /home/flux/examples/reaxff/HNS
 
       # This shouldn't be needed since we are launching manually
-      cores: 64
-      
+      # cores: 64
+
       # This would be the problem size we used for 8
       # command: lmp -v x 64 -v y 16 -v z 16 -in in.reaxc.hns -nocite
       
@@ -51,6 +54,10 @@ spec:
           memory: "110G" # This is actually 128
           cpu: "62"
 
+      existingVolumes:
+        certs:
+          path: /etc/certs
+          secretName: certs
       # We still need to setup spack so flux can start the broker!
       commands:
         # The workers need to come up after the broker and network - we are hitting this issue
@@ -65,3 +72,4 @@ spec:
           . /opt/spack-environment/spack/share/spack/setup-env.sh
           spack env activate .
           cd /home/flux/examples/reaxff/HNS
+          pip3 install flux-metrics-api

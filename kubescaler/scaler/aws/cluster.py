@@ -39,7 +39,7 @@ class EKSCluster(Cluster):
     A scaler for an Amazon EKS Cluster
     """
 
-    default_region = "us-east-1"
+    default_region = "us-east-2"
 
     def __init__(
         self,
@@ -85,7 +85,7 @@ class EKSCluster(Cluster):
         # kube config file (this is no longer used)
         self.kube_config_file = kube_config_file or "kubeconfig-aws.yaml"
         self.image_ami = get_latest_ami(self.region, self.kubernetes_version)
-        self.machine_type = self.machine_type or "m5.large"
+        self.machine_type = self.machine_type or "hpc6a.48xlarge"
         self.ami_type = ami_type or "AL2_x86_64"
         self.capacity_type = capacity_type or "ON_DEMAND"
         self.configuration = None

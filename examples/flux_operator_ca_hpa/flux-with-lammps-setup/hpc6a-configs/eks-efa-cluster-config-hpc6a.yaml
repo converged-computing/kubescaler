@@ -4,7 +4,7 @@ kind: ClusterConfig
 metadata:
   name: scaling-study-efa
   region: us-east-2
-  version: "1.27"
+  version: "1.23"
         
 availabilityZones: ["us-east-2b", "us-east-2c"]
 
@@ -34,7 +34,7 @@ managedNodeGroups:
     instanceType: hpc6a.48xlarge
     minSize: 1
     maxSize: 10
-    desiredCapacity: 1
+    desiredCapacity: 2
     efaEnabled: true
     placement:
       groupName: eks-efa-testing

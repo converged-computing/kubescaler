@@ -28,6 +28,7 @@ the vpc. We do small max sizes here since it's just a demo! This first example r
 $ pip install -e .[aws]
 $ pip install -e kubescaler[aws]
 ```
+
 ```bash
 # Test scale up in increments of 1 (up to 3) for c2-standard-8 (the default) just one iteration!
 $ python test-scale.py --increment 1 small-cluster --max-node-count 3 --min-node-count 0 --start-iter 0 --end-iter 1
@@ -62,9 +63,11 @@ optional arguments:
   --down                    Test scaling down
   --eks-nodegroup           Include this to use eks managed nodegroup, otherwise, it'll use cloudformation stack
 ```
-
-
-
+example 
+```console
+python3 test-scale.py --increment 16 cluster-64-node --max-node-count 64 --min-node-count 0 --start-iter 0 --end-iter 5
+```
+## Metrics
 Several timings that this program tracks. 
 
 | Metric              | Description |

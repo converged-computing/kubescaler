@@ -193,13 +193,6 @@ spec:
                         type: integer
                       type: array
                       x-kubernetes-list-type: atomic
-                    preCommand:
-                      description: Special command to run at beginning of script,
-                        directly after asFlux is defined as sudo -u flux -E (so you
-                        can change that if desired.) This is only valid if FluxRunner
-                        is set (that writes a wait.sh script) This is for the indexed
-                        job pods and the certificate generation container.
-                      type: string
                     pullAlways:
                       default: false
                       description: Allow the user to dictate pulling By default we
@@ -249,6 +242,11 @@ spec:
                     securityContext:
                       description: Security Context https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
                       properties:
+                        addCapabilities:
+                          description: Capabilities to add
+                          items:
+                            type: string
+                          type: array
                         privileged:
                           description: Privileged container
                           type: boolean
@@ -382,6 +380,14 @@ spec:
                       be set in the user interface to override here. This is only
                       valid for a FluxRunner "runFlux" true
                     type: string
+                  scheduler:
+                    description: Custom attributes for the fluxion scheduler
+                    properties:
+                      queuePolicy:
+                        description: Scheduler queue policy, defaults to "fcfs" can
+                          also be "easy"
+                        type: string
+                    type: object
                   wrap:
                     description: Commands for flux start --wrap
                     type: string
@@ -628,13 +634,6 @@ spec:
                         type: integer
                       type: array
                       x-kubernetes-list-type: atomic
-                    preCommand:
-                      description: Special command to run at beginning of script,
-                        directly after asFlux is defined as sudo -u flux -E (so you
-                        can change that if desired.) This is only valid if FluxRunner
-                        is set (that writes a wait.sh script) This is for the indexed
-                        job pods and the certificate generation container.
-                      type: string
                     pullAlways:
                       default: false
                       description: Allow the user to dictate pulling By default we
@@ -684,6 +683,11 @@ spec:
                     securityContext:
                       description: Security Context https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
                       properties:
+                        addCapabilities:
+                          description: Capabilities to add
+                          items:
+                            type: string
+                          type: array
                         privileged:
                           description: Privileged container
                           type: boolean
@@ -710,6 +714,9 @@ spec:
                   type: object
                 type: array
                 x-kubernetes-list-type: atomic
+              shareProcessNamespace:
+                description: Share process namespace?
+                type: boolean
               size:
                 default: 1
                 description: Size (number of job pods to run, size of minicluster
