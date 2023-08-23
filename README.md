@@ -3,7 +3,7 @@
 > Make your Kubernetes cluster YUGE! Or Smol. :)
 
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
-[![All Contributors](https://img.shields.io/badge/all_contributors-1-orange.svg?style=flat-square)](#contributors-)
+[![All Contributors](https://img.shields.io/badge/all_contributors-2-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 [![PyPI](https://img.shields.io/pypi/v/kubescaler)](https://pypi.org/project/kubescaler/)
 
@@ -35,6 +35,7 @@ tool to generate a contributors graphic below.
   <tbody>
     <tr>
       <td align="center" valign="top" width="14.28%"><a href="https://vsoch.github.io"><img src="https://avatars.githubusercontent.com/u/814322?v=4?s=100" width="100px;" alt="Vanessasaurus"/><br /><sub><b>Vanessasaurus</b></sub></a><br /><a href="https://github.com/converged-computing/kubescaler/commits?author=vsoch" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/rajibhossen"><img src="https://avatars.githubusercontent.com/u/7677962?v=4?s=100" width="100px;" alt="Md Rajib Hossen"/><br /><sub><b>Md Rajib Hossen</b></sub></a><br /><a href="https://github.com/converged-computing/kubescaler/commits?author=rajibhossen" title="Code">💻</a></td>
     </tr>
   </tbody>
 </table>
