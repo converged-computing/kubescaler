@@ -44,13 +44,22 @@ def get_parser():
     parser.add_argument(
         "--min-node-count", help="minimum node count", type=int, default=0
     )
+    # temporarily starting with 0 nodes
     parser.add_argument(
         "--start-node-count",
         help="start at this many nodes and go up",
         type=int,
-        default=1,
+        default=0,
     )
-    parser.add_argument("--machine-type", help="AWS machine type", default="m5.large")
+    parser.add_argument(
+        "--machine-type", help="AWS machine type", default="hpc6a.48xlarge"
+    )
+    parser.add_argument(
+        "--eks-nodegroup",
+        action="store_true",
+        help="set this to use eks nodegroup for instances, otherwise, it'll use cloudformation stack",
+        default=False,
+    )
     parser.add_argument(
         "--increment", help="Increment by this value", type=int, default=1
     )
@@ -93,7 +102,7 @@ def main():
     print(f"📛️ Experiment name is {experiment_name}")
 
     # Prepare an output directory, named by cluster
-    outdir = os.path.join(args.outdir, experiment_name, cluster_name)
+    outdir = os.path.join(args.outdir, experiment_name, args.machine_type, cluster_name)
     if not os.path.exists(outdir):
         print(f"📁️ Creating output directory {outdir}")
         os.makedirs(outdir)
@@ -109,6 +118,10 @@ def main():
         # allow an iteration of that size. This must be LESS THAN
         if node_count + args.increment < args.max_node_count:
             return args.increment
+
+        # Temporary workaround to not exceed the max and only scale up by increment
+        if node_count + args.increment > args.max_node_count:
+            return 0
 
         # Otherwise, return the difference (the largest step we can take)
         return args.max_node_count - node_count
@@ -145,6 +158,7 @@ def main():
             machine_type=args.machine_type,
             min_nodes=args.min_node_count,
             max_nodes=args.max_node_count,
+            eks_nodegroup=args.eks_nodegroup,
         )
         # Load a result if we have it
         if os.path.exists(results_file):
@@ -196,6 +210,7 @@ def main():
             increment = next_increment(node_count)
 
         # Delete the cluster and clean up
+        print(f"⚔️ Deleting the cluster - {cluster_name}")
         cli.delete_cluster()
         print(json.dumps(cli.data, indent=4))
         cli.save(results_file)

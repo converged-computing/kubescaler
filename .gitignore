@@ -15,3 +15,5 @@ __pycache__
 *auth-config.yaml
 *kubeconfig.yaml
 *kubeconfig-*.yaml
+**/.DS_Store
+.vscode
