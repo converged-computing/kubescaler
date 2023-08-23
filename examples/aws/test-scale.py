@@ -51,12 +51,15 @@ def get_parser():
         type=int,
         default=0,
     )
-    parser.add_argument("--machine-type", help="AWS machine type", default="hpc6a.48xlarge")
     parser.add_argument(
-        "--eks-nodegroup", 
+        "--machine-type", help="AWS machine type", default="hpc6a.48xlarge"
+    )
+    parser.add_argument(
+        "--eks-nodegroup",
         action="store_true",
         help="set this to use eks nodegroup for instances, otherwise, it'll use cloudformation stack",
-        default=False)
+        default=False,
+    )
     parser.add_argument(
         "--increment", help="Increment by this value", type=int, default=1
     )
@@ -119,7 +122,7 @@ def main():
         # Temporary workaround to not exceed the max and only scale up by increment
         if node_count + args.increment > args.max_node_count:
             return 0
-        
+
         # Otherwise, return the difference (the largest step we can take)
         return args.max_node_count - node_count
 
@@ -155,7 +158,7 @@ def main():
             machine_type=args.machine_type,
             min_nodes=args.min_node_count,
             max_nodes=args.max_node_count,
-            eks_nodegroup=args.eks_nodegroup
+            eks_nodegroup=args.eks_nodegroup,
         )
         # Load a result if we have it
         if os.path.exists(results_file):
@@ -205,7 +208,7 @@ def main():
             print(json.dumps(cli.data, indent=4))
             cli.save(results_file)
             increment = next_increment(node_count)
-        
+
         # Delete the cluster and clean up
         print(f"⚔️ Deleting the cluster - {cluster_name}")
         cli.delete_cluster()

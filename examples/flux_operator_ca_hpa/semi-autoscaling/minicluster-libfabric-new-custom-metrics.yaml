@@ -12,7 +12,7 @@ spec:
   # This doesn't matter so much in interactive mode, tasks specified with the job
   # 12 * 64
   # tasks: 128
-  
+
   # This starts the flux broker without a command (interactive)
   interactive: true
   logging:
@@ -23,12 +23,12 @@ spec:
 
   # Spack installs to /opt/view, without flux-security so no imp
   flux:
-    installRoot: /opt/view    
-    optionFlags: "-ompi=openmpi@5 -c 1 -o cpu-affinity=per-task" 
+    installRoot: /opt/view
+    optionFlags: "-ompi=openmpi@5 -c 1 -o cpu-affinity=per-task"
     scheduler:
       queuePolicy: easy
 
-  containers: 
+  containers:
     - # image: ghcr.io/rse-ops/flux-arm-lammps:june-2023-arm64
       # spack 0.19 with a custom package.py that has updated libfabric
       image: ghcr.io/rse-ops/flux-arm-lammps:libfabric-1.18.1
@@ -39,7 +39,7 @@ spec:
 
       # This would be the problem size we used for 8
       # command: lmp -v x 64 -v y 16 -v z 16 -in in.reaxc.hns -nocite
-      
+
       # Resource limits to ensure 1 pod assigned per node
       # These are purposefully lower - the actual value didn't work, but
       # this should still assign 1:1.
@@ -67,7 +67,7 @@ spec:
         pre: |
           source /etc/profile.d/z10_spack_environment.sh
           asFlux="sudo -u flux -E PYTHONPATH=$PYTHONPATH -E PATH=$PATH -E FI_PROVIDER=efa -E OMPI_MCA_btl=self,ofi -E RDMAV_FORK_SAFE=1 -E FI_EFA_USE_DEVICE_RDMA=1"
-          . /etc/profile.d/z10_spack_environment.sh 
+          . /etc/profile.d/z10_spack_environment.sh
           cd /opt/spack-environment
           . /opt/spack-environment/spack/share/spack/setup-env.sh
           spack env activate .

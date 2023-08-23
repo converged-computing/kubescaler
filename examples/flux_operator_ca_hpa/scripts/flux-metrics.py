@@ -1,11 +1,3 @@
-import collections
-import importlib.util
-import inspect
-import os
-import shutil
-import sys
-import math
-
 try:
     import flux
     import flux.job
@@ -29,7 +21,7 @@ def get_queue_metrics():
     # print(listing)
     pending_jobs = 0
     for jobs in listing["jobs"]:
-        payload = {"id": jobs['id'], "attrs": ["all"]}
+        payload = {"id": jobs["id"], "attrs": ["all"]}
         rpc = flux.job.list.JobListIdRPC(handle, "job-list.list-id", payload)
         try:
             jobinfo = rpc.get()
@@ -46,9 +38,10 @@ def get_queue_metrics():
         # print(jobs['id'], flux.job.info.statetostr(state))
     return pending_jobs
 
+
 def main():
-    job_runtime = 120 # 120 seconds on average
-    estimated_node_uptime = 250 # in seconds from aws to kubernetes
+    job_runtime = 120  # 120 seconds on average
+    estimated_node_uptime = 250  # in seconds from aws to kubernetes
     max_allowable_nodes = 50
 
     jobs_in_queue = get_queue_metrics()
@@ -56,20 +49,23 @@ def main():
     print(jobs_in_queue)
 
     estimated_total_job_runtime = job_runtime * jobs_in_queue
-    
+
     current_nodes = 1
     while True:
-        if ((estimated_total_job_runtime - estimated_node_uptime) / current_nodes) > estimated_node_uptime:
+        if (
+            (estimated_total_job_runtime - estimated_node_uptime) / current_nodes
+        ) > estimated_node_uptime:
             current_nodes += 1
         else:
             break
-    
-    if current_nodes*8 > max_allowable_nodes:
-        print(int(max_allowable_nodes/current_nodes))
+
+    if current_nodes * 8 > max_allowable_nodes:
+        print(int(max_allowable_nodes / current_nodes))
     else:
         print(current_nodes)
 
     # perform kubernetes scaling operation on the minicluster
+
 
 if __name__ == "__main__":
     main()

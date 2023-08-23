@@ -1,9 +1,9 @@
 # Flux cluster setup with an application
 
-We will need to setup a kubernetes cluster in aws that will have necessary supports to run an application specifically LAMMPS. 
+We will need to setup a kubernetes cluster in aws that will have necessary supports to run an application specifically LAMMPS.
 For example, LAMMPS requires EFA enabled networking and a specific placement group.
 
-Note: For some reason, efa plugin failed with eksctl latest version. So, the current tested and working version is eksctl v0.109.0. 
+Note: For some reason, efa plugin failed with eksctl latest version. So, the current tested and working version is eksctl v0.109.0.
 
 Deploy the cluster using the below command
 ```console
@@ -31,7 +31,7 @@ $ kubectl exec -it -n flux-operator ${POD} bash
 ```console
 source /etc/profile.d/z10_spack_environment.sh
 asFlux="sudo -u flux -E PYTHONPATH=$PYTHONPATH -E PATH=$PATH -E FI_PROVIDER=efa -E OMPI_MCA_btl=self,ofi -E RDMAV_FORK_SAFE=1 -E FI_EFA_USE_DEVICE_RDMA=1"
-. /etc/profile.d/z10_spack_environment.sh 
+. /etc/profile.d/z10_spack_environment.sh
 cd /opt/spack-environment
 . /opt/spack-environment/spack/share/spack/setup-env.sh
 spack env activate .
@@ -60,4 +60,3 @@ python3 run-experiments.py --outdir /home/flux --workdir /opt/lammps/examples/re
 ```
 
 Follow this [link](https://github.com/converged-computing/operator-experiments/tree/main/aws/lammps/hpc7g/run2) for more information. @
-

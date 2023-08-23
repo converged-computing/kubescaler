@@ -1,7 +1,7 @@
 apiVersion: eksctl.io/v1alpha5
 kind: ClusterConfig
 
-metadata: 
+metadata:
   name: scaling-study-efa-hossen1-08142023
   region: us-east-1
   version: "1.27"
@@ -46,4 +46,3 @@ managedNodeGroups:
     ssh:
       allow: true
       publicKeyPath: ~/.ssh/id_rsa.pub
-    

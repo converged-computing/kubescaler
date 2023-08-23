@@ -160,7 +160,7 @@ def main():
         print(" ".join(flux_command))
         if args.dry_run:
             continue
-        
+
         job = subprocess.Popen(flux_command, stdout=subprocess.PIPE)
         jobid = job.communicate()[0]
         # jobid = subprocess.check_output(flux_command)
@@ -197,10 +197,14 @@ def main():
             info = get_info(jobid)
             if info and info["state"] == "INACTIVE":
                 state = info["state"]
-                print(f"No longer waiting on job {jobid}, FINISHED {info['returncode']}!")
+                print(
+                    f"No longer waiting on job {jobid}, FINISHED {info['returncode']}!"
+                )
                 break
             else:
-                print(f"Still waiting for job {jobid} on {info['nodelist']}, has state {info['state']}")
+                print(
+                    f"Still waiting for job {jobid} on {info['nodelist']}, has state {info['state']}"
+                )
                 time.sleep(args.sleep)
 
         # When we get here, save all the metadata
@@ -209,6 +213,7 @@ def main():
         with open(outfile, "w") as fd:
             fd.write(json.dumps(info, indent=4))
     print("Jobs are complete, goodbye! 👋️")
+
 
 if __name__ == "__main__":
     main()

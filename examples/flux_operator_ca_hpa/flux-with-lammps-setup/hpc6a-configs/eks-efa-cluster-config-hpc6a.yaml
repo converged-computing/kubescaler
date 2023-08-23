@@ -5,7 +5,7 @@ metadata:
   name: scaling-study-efa
   region: us-east-2
   version: "1.23"
-        
+
 availabilityZones: ["us-east-2b", "us-east-2c"]
 
 iam:

@@ -47,7 +47,7 @@ installed to my current cluster with Kubernetes 1.27).
 
 ### HPA Setup
 Before we deploy any autoscaler, we need a metrics server! This doesn't come out of the box with kind so
-we install it: 
+we install it:
 Note: You can look at aws documentation [here](https://docs.aws.amazon.com/eks/latest/userguide/metrics-server.html)
 
 ```console

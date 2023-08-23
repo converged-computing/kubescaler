@@ -1,6 +1,6 @@
 # Flux Operator Mini Cluster Setup
 
-## Basic Minicluster setup 
+## Basic Minicluster setup
 This setup assumes you already created kubernetes cluster with at least 1/2 Nodes by following the direction [here](../README.md)
 
 Create the flux-operator namespace and install the operator:
@@ -27,13 +27,13 @@ flux-sample-1-mjj7b   1/1     Running   0          6m50s
 
 ## Flux Cluster for With LAMMPS Application
 
-For this setup, we can not use python api, because, currently, we need placement group for lammps and boto3 api lacks the support for providing `placement group` option. So, we will use `eksctl`. If you don't have `eksctl`, please install it first. 
+For this setup, we can not use python api, because, currently, we need placement group for lammps and boto3 api lacks the support for providing `placement group` option. So, we will use `eksctl`. If you don't have `eksctl`, please install it first.
 
 ```console
 eksctl create cluster -f operator-minicluster/hpc7g-configs/eks-efa-cluster-config-hpc7g.yaml
 ```
 
-This will create a cluster with managed nodegroup, oidc provider, and service account for cluster autoscaler. 
+This will create a cluster with managed nodegroup, oidc provider, and service account for cluster autoscaler.
 
 Now deploy an arm version of the Flux Operator.
 ```console

@@ -63,12 +63,12 @@ optional arguments:
   --down                    Test scaling down
   --eks-nodegroup           Include this to use eks managed nodegroup, otherwise, it'll use cloudformation stack
 ```
-example 
+example
 ```console
 python3 test-scale.py --increment 16 cluster-64-node --max-node-count 64 --min-node-count 0 --start-iter 0 --end-iter 5
 ```
 ## Metrics
-Several timings that this program tracks. 
+Several timings that this program tracks.
 
 | Metric              | Description |
 | :---------------- | :------ |
@@ -79,7 +79,7 @@ Several timings that this program tracks.
 | create_cluster | Total aggregrated time for creating a cluster, this includes all the above metrics |
 | watch_for_nodes_in_aws | When we perform scaling up, we track three timings in parallel. This metrics track how longs it takes to show a node in the aws when we do scale up operation in the code |
 | wait_for_stack_updates | We perform scale up by updating the cloudformation stack or eks nodegroup, which update the desired size in the autoscaling group, so this updates takes time. we track this to know how long it takes for the cloudformation or eks nodegroup to complete its update |
-| wait_for_nodes_in_k8s | this metrics tracks how long it takes for the nodes to show up in kubernetes once we apply the scale up operation | 
+| wait_for_nodes_in_k8s | this metrics tracks how long it takes for the nodes to show up in kubernetes once we apply the scale up operation |
 | delete_workers_stack | This one tracks the time to delete a cloudformation stack or eks nodegroup |
 | _delete_cluster | this one's shows how much time it takes when we call `boto3.eks.delete_cluster()` |
 | delete_vpc | time to delete a cloudformation stack for vpc |

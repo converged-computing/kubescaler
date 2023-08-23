@@ -1,6 +1,6 @@
 # Setup Kubernetes Cluster with Cluster Autoscaling
 
-## Deploy the cluster 
+## Deploy the cluster
 This file creates/deletes/scales a EKS Cluster. The nodes are managed by both EKS Nodegroup and Cloudformation Stacks.
 
 ```
@@ -10,28 +10,28 @@ positional arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
-  --experiment EXPERIMENT 
+  --experiment EXPERIMENT
     Experiment name (defaults to script name)
-  
-  --node-count NODE_COUNT 
+
+  --node-count NODE_COUNT
     starting node count of the cluster
-  
-  --max-node-count MAX_NODE_COUNT 
+
+  --max-node-count MAX_NODE_COUNT
     maximum node count
-  
-  --min-node-count MIN_NODE_COUNT 
+
+  --min-node-count MIN_NODE_COUNT
     minimum node count
-  
-  --machine-type MACHINE_TYPE 
+
+  --machine-type MACHINE_TYPE
     AWS EC2 Instance types
-  
-  --operation [{create,delete,scale}] 
+
+  --operation [{create,delete,scale}]
     Define which operation you want to perform, If you want to scale, be sure to increase the NODE_COUNT. The cluster size will increase depending on the current instance size. if NODE_COUNT is less than the current, the cluster nodes will be scaled down.
-  
-  --eks-nodegroup    
-    Include this option to use eks nodegroup for instances, otherwise, it'll use cloudformation stack. EKS Nodegroup will automatically set tags in the aws autoscaling group so that cluster autoscaler can discover them. 
-  
-  --enable-cluster-autoscaler 
+
+  --eks-nodegroup
+    Include this option to use eks nodegroup for instances, otherwise, it'll use cloudformation stack. EKS Nodegroup will automatically set tags in the aws autoscaling group so that cluster autoscaler can discover them.
+
+  --enable-cluster-autoscaler
     Include this to enable cluster autoscaling. This will also create an OIDC provider for the cloud. be sure to take a note of the RoleARN that this script will print.
 ```
 
@@ -61,7 +61,7 @@ Be sure to change two things in this file [cluster-autoscaler-autodiscover.yaml]
 1. RoleARN  `arn:aws:iam::<account-id>:role/AmazonEKSClusterAutoscalerRole` in the service account portion
 2. Cluster Name - `kubernetes-flux-operator-hpa-ca-cluster` in the commnds of the cluster autoscaler.
 
-then apply the changes.. 
+then apply the changes..
 ```console
 kubectl --kubeconfig=kubeconfig-aws.yaml apply -f cluster-autoscaler/cluster-autoscaler-autodiscover.yaml
 ```

@@ -105,7 +105,7 @@ def get_queue_metrics():
     # print(listing)
     pending_jobs = 0
     for jobs in listing["jobs"]:
-        payload = {"id": jobs['id'], "attrs": ["all"]}
+        payload = {"id": jobs["id"], "attrs": ["all"]}
         rpc = flux.job.list.JobListIdRPC(handle, "job-list.list-id", payload)
         try:
             jobinfo = rpc.get()
@@ -120,9 +120,10 @@ def get_queue_metrics():
 
     return pending_jobs
 
+
 def calculate_node_count():
-    job_runtime = 120 # 120 seconds on average
-    estimated_node_uptime = 250 # in seconds from aws to kubernetes
+    job_runtime = 120  # 120 seconds on average
+    estimated_node_uptime = 250  # in seconds from aws to kubernetes
     max_allowable_nodes = 50
 
     jobs_in_queue = get_queue_metrics()
@@ -130,19 +131,20 @@ def calculate_node_count():
     print(f"Total jobs in the queue - {jobs_in_queue}")
 
     estimated_total_job_runtime = job_runtime * jobs_in_queue
-    
+
     current_nodes = 1
     while True:
-        if ((estimated_total_job_runtime - estimated_node_uptime) / current_nodes) > estimated_node_uptime:
+        if (
+            (estimated_total_job_runtime - estimated_node_uptime) / current_nodes
+        ) > estimated_node_uptime:
             current_nodes += 1
         else:
             break
-    
-        if (current_nodes*8) > max_allowable_nodes:
+
+        if (current_nodes * 8) > max_allowable_nodes:
             print(f"Calculated nodes are - {int(max_allowable_nodes/8)}")
         else:
             print(f"Calculated nodes are - {current_nodes}")
-
 
 
 def main():
@@ -210,7 +212,7 @@ def main():
         print(" ".join(flux_command))
         if args.dry_run:
             continue
-        
+
         job = subprocess.Popen(flux_command, stdout=subprocess.PIPE)
         jobid = job.communicate()[0]
         # jobid = subprocess.check_output(flux_command)
@@ -232,10 +234,14 @@ def main():
             info = get_info(jobid)
             if info and info["state"] == "INACTIVE":
                 state = info["state"]
-                print(f"No longer waiting on job {jobid}, FINISHED {info['returncode']}!")
+                print(
+                    f"No longer waiting on job {jobid}, FINISHED {info['returncode']}!"
+                )
                 break
             else:
-                print(f"Still waiting for job {jobid} on {info['nodelist']}, has state {info['state']}")
+                print(
+                    f"Still waiting for job {jobid} on {info['nodelist']}, has state {info['state']}"
+                )
                 time.sleep(args.sleep)
 
         # When we get here, save all the metadata
@@ -244,6 +250,7 @@ def main():
         with open(outfile, "w") as fd:
             fd.write(json.dumps(info, indent=4))
     print("Jobs are complete, goodbye! 👋️")
+
 
 if __name__ == "__main__":
     main()

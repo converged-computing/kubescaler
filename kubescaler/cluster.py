@@ -52,6 +52,7 @@ class Cluster:
 
         # Easy way to save times
         self.times = {}
+
     def delete_cluster(self):
         """
         Delete the cluster
