@@ -6,6 +6,7 @@
 [![All Contributors](https://img.shields.io/badge/all_contributors-2-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 [![PyPI](https://img.shields.io/pypi/v/kubescaler)](https://pypi.org/project/kubescaler/)
+[![DOI](https://zenodo.org/badge/644706941.svg)](https://zenodo.org/badge/latestdoi/644706941)
 
 <a target="_blank" rel="noopener noreferrer" href="https://github.com/converged-computing/kubescaler/blob/main/docs/assets/img/logo-transparent.png">
     <img align="right" style="width: 250px; float: right; padding-left: 20px;" src="https://github.com/converged-computing/kubescaler/raw/main/docs/assets/img/logo-transparent.png" alt="KubeScaler Logo">
