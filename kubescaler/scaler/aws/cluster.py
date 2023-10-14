@@ -1046,7 +1046,7 @@ class EKSCluster(Cluster):
                 clusterName=self.cluster_name, nodegroupName=self.node_group_name
             )
         except Exception:
-            logger.warning(f"✖️ Node Group {nodegroup_name} does not exist.")
+            logger.warning(f"✖️  Node Group {nodegroup_name} does not exist.")
             return
 
         try:
