@@ -144,7 +144,7 @@ class EKSCluster(Cluster):
             )
 
     @timed
-    def create_cluster(self):
+    def create_cluster(self, machine_types=None, create_nodes=True):
         """
         Create a cluster.
 
@@ -157,6 +157,10 @@ class EKSCluster(Cluster):
         that the AWS client discovers here (in token.py) to generate a token.
         It's best to be consistent and use an environment set (that ideally
         has a long enough expiration) OR just the $HOME/.aws/config.
+
+        machine_types is exposed to allow for custom instances request for spot!
+        But you can also use create_cluster_nodes and set create_nodes to False.
+        If you set create_nodes to false, it will not create the node group/nodes.
         """
         print("🥞️ Creating VPC stack and subnets...")
         self.set_vpc_stack()
@@ -184,32 +188,45 @@ class EKSCluster(Cluster):
         self.ensure_kube_config()
         self.get_keypair()
 
+        # Cut out early if we are not creating nodes
+        if not create_nodes:
+            print(
+                "Not creating nodes! Ensure to call create_cluster_nodes to do so and generate kubectl config."
+            )
+            return self.cluster
+        return self.create_cluster_nodes(machine_types)
+
+    @timed
+    def create_cluster_nodes(self, machine_types=None):
+        """
+        Create cluster nodes! This is done separately in case you are doing experiments.
+        """
         # The cluster is actually created with no nodes - just the control plane!
         # Here is where we create the workers, via a stack. Because apparently
         # AWS really likes their pancakes. 🥞️
         if self.eks_nodegroup:
-            self.set_or_create_nodegroup()
+            self.set_or_create_nodegroup(machine_types=machine_types)
         else:
             self.set_workers_stack()
 
         # enabling cluster autoscaler. we will create an oidc provider and a cluster autoscaler role to be used by serviceaccount
         if self.enable_cluster_autoscaler:
             self.set_oidc_provider()
-
             self.create_autoscaler_role()
-
         self.create_auth_config()
 
         # We can only wait for the node group after we set the auth config!
         # I was surprised this is expecting the workers name and not the node
         # group name.
         self.wait_for_nodes()
-
         print(f"🦊️ Writing config file to {self.kube_config_file}")
         print(f"  Usage: kubectl --kubeconfig={self.kube_config_file} get nodes")
         return self.cluster
 
     def load_cluster_info(self):
+        """
+        Load information for a cluster with eks describe cluster.
+        """
         self.set_vpc_stack()
         self.set_subnets()
 
@@ -470,19 +487,24 @@ class EKSCluster(Cluster):
             if output["OutputKey"] == "NodeAutoScalingGroup":
                 self.node_autoscaling_group_name = output["OutputValue"]
 
-    def set_or_create_nodegroup(self):
+    def set_or_create_nodegroup(self, machine_types=None):
         """
         Get or create the workers stack, or the nodes for the cluster.
+
+        If the nodgroup is not created yet, you can set a custom set of machine_types.
+        This is intended for the spot instance creation case.
         """
         try:
             self.nodegroup = self.eks.describe_nodegroup(
                 clusterName=self.cluster_name, nodegroupName=self.node_group_name
             )
         except Exception:
-            self.nodegroup = self.create_nodegroup()
+            self.nodegroup = self.create_nodegroup(machine_types=machine_types)
 
     def set_oidc_provider(self):
-        "Get or Create an OIDC provider for the cluster. this will be used by cluster autoscaler Role."
+        """
+        Get or Create an OIDC provider for the cluster. this will be used by cluster autoscaler Role.
+        """
         print("Setting Up the cluster OIDC Provider")
         try:
             self.oidc_provider_stack = self.cf.describe_stacks(
@@ -609,10 +631,17 @@ class EKSCluster(Cluster):
         return self._create_stack(stack, self.workers_name)
 
     @timed
-    def create_nodegroup(self):
+    def create_nodegroup(self, machine_types=None):
         """
         Create the EKS Managed Node Group (the nodes for the EKS cluster)
+
+        Add additional machine types with machine_types.
         """
+        # Allow a custom set of 'on the fly' machine types for spot experiments
+        machine_types = machine_types or []
+        if not machine_types:
+            machine_types = [self.machine_type]
+
         node_group = self.eks.create_nodegroup(
             clusterName=self.cluster_name,
             nodegroupName=self.node_group_name,
@@ -622,7 +651,7 @@ class EKSCluster(Cluster):
                 "desiredSize": self.node_count,
             },
             subnets=[str(subnet) for subnet in self.vpc_subnet_ids],
-            instanceTypes=[self.machine_type],
+            instanceTypes=machine_types,
             amiType=self.ami_type,
             remoteAccess={
                 "ec2SshKey": self.keypair_name,
@@ -1005,6 +1034,7 @@ class EKSCluster(Cluster):
     def node_group_name(self):
         return self.cluster_name + "-worker-group"
 
+    @timed
     def delete_nodegroup(self, nodegroup_name):
         """
         Delete a stack and wait for it to be deleted
@@ -1016,7 +1046,7 @@ class EKSCluster(Cluster):
                 clusterName=self.cluster_name, nodegroupName=self.node_group_name
             )
         except Exception:
-            logger.warning(f"Node Group {nodegroup_name} does not exist.")
+            logger.warning(f"✖️ Node Group {nodegroup_name} does not exist.")
             return
 
         try:
