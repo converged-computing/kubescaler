@@ -220,7 +220,7 @@ class EKSCluster(Cluster):
         # group name.
         self.wait_for_nodes()
         print(f"🦊️ Writing config file to {self.kube_config_file}")
-        print(f"  Usage: kubectl --kubeconfig={self.kube_config_file} get nodes")
+        print(f"   Usage: kubectl --kubeconfig={self.kube_config_file} get nodes")
         return self.cluster
 
     def load_cluster_info(self):
@@ -315,7 +315,7 @@ class EKSCluster(Cluster):
         start = time.time()
         kubectl = self.get_k8s_client()
         while True:
-            print(f"⏱️ Waiting for {self.node_count} nodes to be Ready...")
+            print(f"⏱️  Waiting for {self.node_count} nodes to be Ready...")
             time.sleep(5)
             nodes = kubectl.list_node()
             ready_count = 0
@@ -398,6 +398,9 @@ class EKSCluster(Cluster):
         try:
             k8sutils.create_from_yaml(kubectl.api_client, self.auth_config_file)
         except Exception as e:
+            # Don't print the "this already exists error" we might be re-using it
+            if "already exists" in str(e):
+                pass
             print(f"😭️ Kubectl create from yaml returns in error: {e}")
 
     def ensure_kube_config(self):
