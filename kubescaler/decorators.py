@@ -3,6 +3,7 @@
 #
 # SPDX-License-Identifier: (MIT)
 
+import signal
 import time
 from functools import partial, update_wrapper
 
@@ -30,6 +31,46 @@ class timed:
         end = time.time()
         cls.times[name] = round(end - start, 3)
         return res
+
+
+def timed_function(func):
+    """
+    Time a function
+    """
+
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        result = func(*args, **kwargs)
+        end = time.time()
+        total_time = end - start
+        return {"result": result, "time_seconds": total_time}
+
+    return wrapper
+
+
+# https://stackoverflow.com/questions/2281850/timeout-function-if-it-takes-too-long-to-finish
+class TimeoutException(Exception):
+    pass
+
+
+class timeout:
+    """
+    Usage: with timeout:
+    """
+
+    def __init__(self, seconds=60, error_message="Timeout"):
+        self.seconds = seconds
+        self.error_message = error_message
+
+    def handle_timeout(self, signum, frame):
+        raise TimeoutException(self.error_message)
+
+    def __enter__(self):
+        signal.signal(signal.SIGALRM, self.handle_timeout)
+        signal.alarm(self.seconds)
+
+    def __exit__(self, type, value, traceback):
+        signal.alarm(0)
 
 
 class retry:
