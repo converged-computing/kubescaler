@@ -14,6 +14,7 @@ and **Merged pull requests**. Critical items to know are:
 The versions coincide with releases on pip. Only major versions will be released as tags on Github.
 
 ## [0.0.x](https://github.com/converged-computing/kubescaler/tree/main) (0.0.x)
+ - support adding one-off node groups to a cluster (0.0.17)
  - allow manual customization and timing of nodegroup (e.g., for spot) (0.0.16)
  - extensive changes to aws client (thanks to @rajibhossen!) (0.0.15)
  - use api client with consistent token to associate nodes to cluster (0.0.14)

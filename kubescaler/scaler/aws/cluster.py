@@ -104,7 +104,7 @@ class EKSCluster(Cluster):
         self.vpc_id = None
         self.set_roles()
 
-        # switch for eks managed nodegroup or cloudformation
+        # switch for eks managed nodegroup (True) or cloudformation (False)
         self.eks_nodegroup = eks_nodegroup
 
         if self.eks_nodegroup:
@@ -197,6 +197,7 @@ class EKSCluster(Cluster):
         return self.create_cluster_nodes(machine_types)
 
     @timed
+    @timed
     def create_cluster_nodes(self, machine_types=None):
         """
         Create cluster nodes! This is done separately in case you are doing experiments.
@@ -207,6 +208,7 @@ class EKSCluster(Cluster):
         if self.eks_nodegroup:
             self.set_or_create_nodegroup(machine_types=machine_types)
         else:
+            # This uses the node group / workers stack associated
             self.set_workers_stack()
 
         # enabling cluster autoscaler. we will create an oidc provider and a cluster autoscaler role to be used by serviceaccount
@@ -490,19 +492,24 @@ class EKSCluster(Cluster):
             if output["OutputKey"] == "NodeAutoScalingGroup":
                 self.node_autoscaling_group_name = output["OutputValue"]
 
-    def set_or_create_nodegroup(self, machine_types=None):
+    def set_or_create_nodegroup(self, machine_types=None, node_group_name=None):
         """
         Get or create the workers stack, or the nodes for the cluster.
 
         If the nodgroup is not created yet, you can set a custom set of machine_types.
-        This is intended for the spot instance creation case.
+        This is intended for the spot instance creation case. This allows customizing
+        the node group name for more advanced use cases (e.g., adding a separate node
+        group on your own)!
         """
+        node_group_name = node_group_name or self.node_group_name
         try:
             self.nodegroup = self.eks.describe_nodegroup(
-                clusterName=self.cluster_name, nodegroupName=self.node_group_name
+                clusterName=self.cluster_name, nodegroupName=node_group_name
             )
         except Exception:
-            self.nodegroup = self.create_nodegroup(machine_types=machine_types)
+            self.nodegroup = self.create_nodegroup(
+                machine_types=machine_types, node_group_name=node_group_name
+            )
 
     def set_oidc_provider(self):
         """
@@ -589,6 +596,9 @@ class EKSCluster(Cluster):
     def create_workers_stack(self):
         """
         Create the workers stack (the nodes for the EKS cluster)
+
+        Note that this currently just supports the node group directly
+        associated with the cluster (not one created manually).
         """
         stack = self.cf.create_stack(
             StackName=self.workers_name,
@@ -634,12 +644,31 @@ class EKSCluster(Cluster):
         return self._create_stack(stack, self.workers_name)
 
     @timed
-    def create_nodegroup(self, machine_types=None):
+    def create_nodegroup(
+        self,
+        machine_types=None,
+        node_group_name=None,
+        min_nodes=None,
+        max_nodes=None,
+        node_count=None,
+        capacity_type=None,
+    ):
         """
         Create the EKS Managed Node Group (the nodes for the EKS cluster)
 
-        Add additional machine types with machine_types.
+        Add additional machine types with machine_types. You can provide a custom
+        node_group_name and min/max/count for "one off" creations. E.g., for
+        an experiment we are creating spot instances for the main groups,
+        but then have one persistent group for operators to be installed to.
+        The same VPC, subsets, etc. are used.
         """
+        # Allow to customize one off name for new group
+        node_group_name = node_group_name or self.node_group_name
+        min_nodes = min_nodes or self.min_nodes
+        max_nodes = max_nodes or self.max_nodes
+        node_count = node_count or self.node_count
+        capacity_type = capacity_type or self.capacity_type
+
         # Allow a custom set of 'on the fly' machine types for spot experiments
         machine_types = machine_types or []
         if not machine_types:
@@ -647,11 +676,11 @@ class EKSCluster(Cluster):
 
         node_group = self.eks.create_nodegroup(
             clusterName=self.cluster_name,
-            nodegroupName=self.node_group_name,
+            nodegroupName=node_group_name,
             scalingConfig={
-                "minSize": self.min_nodes,
-                "maxSize": self.max_nodes,
-                "desiredSize": self.node_count,
+                "minSize": min_nodes,
+                "maxSize": max_nodes,
+                "desiredSize": node_count,
             },
             subnets=[str(subnet) for subnet in self.vpc_subnet_ids],
             instanceTypes=machine_types,
@@ -665,10 +694,10 @@ class EKSCluster(Cluster):
                 "k8s.io/cluster-autoscaler/enabled": "true",
                 "k8s.io/cluster-autoscaler/" + self.cluster_name: "None",
             },
-            capacityType=self.capacity_type,
+            capacityType=capacity_type,
         )
         print(f"The status of nodegroup {node_group['nodegroup']['status']}")
-        return self._create_nodegroup(node_group, self.node_group_name)
+        return self._create_nodegroup(node_group, node_group_name)
 
     @timed
     def new_cluster(self):
@@ -1038,30 +1067,28 @@ class EKSCluster(Cluster):
         return self.cluster_name + "-worker-group"
 
     @timed
-    def delete_nodegroup(self, nodegroup_name):
+    def delete_nodegroup(self, node_group_name):
         """
         Delete a stack and wait for it to be deleted
         """
-        print(f"🥞️ Attempting delete of node group {nodegroup_name}...")
+        print(f"🥞️ Attempting delete of node group {node_group_name}...")
 
         try:
             self.eks.delete_nodegroup(
-                clusterName=self.cluster_name, nodegroupName=self.node_group_name
+                clusterName=self.cluster_name, nodegroupName=node_group_name
             )
         except Exception:
-            logger.warning(f"✖️  Node Group {nodegroup_name} does not exist.")
+            logger.warning(f"✖️  Node Group {node_group_name} does not exist.")
             return
 
         try:
-            logger.info(f"Waiting for {nodegroup_name} to be deleted..")
+            logger.info(f"Waiting for {node_group_name} to be deleted..")
             waiter = self.eks.get_waiter("nodegroup_deleted")
-            waiter.wait(
-                clusterName=self.cluster_name, nodegroupName=self.node_group_name
-            )
+            waiter.wait(clusterName=self.cluster_name, nodegroupName=node_group_name)
         except Exception:
             raise ValueError("Waiting for nodegroup deletion exceeded wait time.")
         else:
-            print(f"Node group {nodegroup_name} is deleted successfully")
+            print(f"Node group {node_group_name} is deleted successfully")
 
     @timed
     def _delete_cluster(self):
@@ -1090,6 +1117,9 @@ class EKSCluster(Cluster):
         And let's go backwards - deleting first what we created last.
         """
         logger.info("🔨️ Deleting node workers...")
+        logger.info(
+            "    If you have one-off created nodegroups, you'll need to delete them yourself."
+        )
         if self.eks_nodegroup:
             self.delete_nodegroup(self.node_group_name)
         else:
@@ -1135,7 +1165,10 @@ class EKSCluster(Cluster):
     @retry
     def _scale_using_cf(self, count):
         """
-        Make a request to scale the cluster
+        Make a request to scale the cluster.
+
+        Note that this currently only supports the node group associated directly
+        with the cluster (not one that you manually create).
         """
         response = self.cf.update_stack(
             StackName=self.workers_name,
@@ -1208,6 +1241,9 @@ class EKSCluster(Cluster):
     def _scale_using_eks_nodegroup(self, count):
         """
         Make a request to scale the cluster
+
+        Note that this currently only supports the node group associated directly
+        with the cluster (not one that you manually create).
         """
         response = self.eks.update_nodegroup_config(
             clusterName=self.cluster_name,
