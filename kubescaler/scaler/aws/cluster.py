@@ -778,31 +778,13 @@ class EKSCluster(Cluster):
         if node_group is None:
             raise ValueError("Could not create nodegroup")
 
-        # DO NOT USE THE WAITER or uncomment, it is buggy and does not work.
-        # self.wait_for_nodegroup(nodegroup_name)
+        # DO NOT USE THE WAITER, it is buggy and does not work.
         self.wait_for_nodes()
 
         # Retrieve the same metadata if we had retrieved it
         return self.eks.describe_nodegroup(
             clusterName=self.cluster_name, nodegroupName=nodegroup_name
         )
-
-    def wait_for_nodegroup(self, nodegroup_name):
-        """
-        Wait for the nodegroup to create.
-
-        In practice, this waiter is very buggy. It's easier sometimes
-        to query the nodes and check their status is Ready.
-        """
-        try:
-            print(f"Waiting for {nodegroup_name} nodegroup...")
-            waiter = self.eks.get_waiter("nodegroup_active")
-            # MaxAttempts defaults to 120, and Delay 30 seconds
-            waiter.wait(clusterName=self.cluster_name, nodegroupName=nodegroup_name)
-        except Exception as e:
-            # Allow waiting 3 more minutes
-            print(f"Waiting for nodegroup creation exceeded wait time: {e}")
-            time.sleep(180)
 
     def delete_stack(self, stack_name):
         """
