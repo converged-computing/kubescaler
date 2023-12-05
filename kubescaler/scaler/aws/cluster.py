@@ -311,8 +311,10 @@ class EKSCluster(Cluster):
         """
         Wait for the nodes to be ready.
 
-        We do this separately to allow timing. This function would be improved if
-        we didn't need subprocess, but the waiter doesn't seem to work.
+        We do this separately to allow timing. This function
+        can't get a perfectly accurate timing given the sleep, but the
+        waiter doesn't work. But I suspect the waiter has a sleep too, so
+        maybe not so bad.
         """
         start = time.time()
         kubectl = self.get_k8s_client()
