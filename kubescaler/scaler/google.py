@@ -27,13 +27,18 @@ class GKECluster(Cluster):
     A scaler for a Google Kubernetes Engine (GKE) cluster
     """
 
-    default_region = "us-central1-a"
+    default_region = "us-central1"
 
     def __init__(
         self,
         project,
-        machine_type_memory_gb=32,
-        machine_type_vcpu=8,
+        default_pool_name="default-pool",
+        zone="us-central1-a",
+        spot=False,
+        max_vcpu=8,
+        max_memory=32,
+        # Initial labels for the default cluster
+        labels=None,
         **kwargs,
     ):
         """
@@ -47,10 +52,14 @@ class GKECluster(Cluster):
         self.client = container_v1.ClusterManagerClient()
         self.project = project
         self.machine_type = self.machine_type or "c2-standard-8"
-        self.machine_type_vcpu = machine_type_vcpu
-        self.machine_type_memory_gb = machine_type_memory_gb
         self.tags = self.tags or ["kubescaler-cluster"]
+        self.default_pool = default_pool_name
         self.configuration = None
+        self.labels = labels
+        self.zone = zone
+        self.max_vcpu = max_vcpu
+        self.max_memory = max_memory
+        self.spot = False
 
     @timed
     def delete_cluster(self):
@@ -62,13 +71,6 @@ class GKECluster(Cluster):
         self.client.delete_cluster(request=request)
         self.configuration = None
         self.wait_for_delete()
-
-    @property
-    def zone(self):
-        """
-        The region is the zone minus the last letter!
-        """
-        return self.region.rsplit("-", 1)[0]
 
     @property
     def data(self):
@@ -85,13 +87,13 @@ class GKECluster(Cluster):
             "description": self.description,
         }
 
-    def scale_up(self, count, pool_name="default-pool"):
+    def scale_up(self, count, pool_name=None):
         """
         Make a request to scale the cluster
         """
         return self.scale(count, count, count + 1, pool_name=pool_name)
 
-    def scale_down(self, count, pool_name="default-pool"):
+    def scale_down(self, count, pool_name=None):
         """
         Make a request to scale the cluster
         """
@@ -99,10 +101,11 @@ class GKECluster(Cluster):
             count, max(count - 1, self.min_nodes), count, pool_name=pool_name
         )
 
-    def scale(self, count, min_count, max_count, pool_name="default-pool"):
+    def scale(self, count, min_count, max_count, pool_name=None):
         """
         Make a request to scale the cluster
         """
+        pool_name = pool_name or self.default_pool
         node_pool_name = f"{self.cluster_name}/nodePools/{pool_name}"
 
         # Always make the max node count one more than we want
@@ -111,8 +114,6 @@ class GKECluster(Cluster):
             enabled=True,
             min_node_count=min_count,
             max_node_count=max_count,
-            #            total_min_node_count=count,
-            #            total_max_node_count=count,
         )
 
         # https://github.com/googleapis/python-container/blob/main/google/cloud/container_v1/types/cluster_service.py#L3884
@@ -140,24 +141,16 @@ class GKECluster(Cluster):
         )
         return self.client.set_node_pool_size(request=request)
 
-    @property
-    def node_config(self):
+    def get_node_config(self, machine_type=None, spot=False, labels=None):
         """
-        Create the node config
-
-        Note that instead of initial_node_count + node_config above,
-        we could just use node_pool. I think the first creates the second,
-        and I'm not sure about pros/cons.
+        Get a node config for a specific machine type, and spot.
         """
-        # Note that if you use GKE Autopilot you need to use a different class, see the link:
-        # https://github.com/googleapis/python-container/blob/main/google/cloud/container_v1/types/cluster_service.py#L448
         node_config = container_v1.NodeConfig(
-            machine_type=self.machine_type,
-            tags=self.tags
-            # metadata = {"startup-script": my_startup_script,
-            #            "user-data": my_user_data}
+            machine_type=machine_type or self.machine_type,
+            tags=self.tags,
+            spot=spot or self.spot,
+            labels=labels,
         )
-        print("\n🥣️ cluster node_config")
         print(node_config)
         return node_config
 
@@ -190,52 +183,100 @@ class GKECluster(Cluster):
             self.configuration = configuration
 
         # This has .api_client for just the api client
-        return kubernetes_client.CoreV1Api(
-            kubernetes_client.ApiClient(self.configuration)
-        )
+        return kubernetes_client.CoreV1Api(self.get_api_client())
 
-    @property
-    def cluster(self):
+    def get_api_client(self):
+        return kubernetes_client.ApiClient(self.configuration)
+
+    def get_existing_cluster(self, cluster_name=None):
+        """
+        Get a cluster after it's been created.
+        """
+        name = cluster_name or self.cluster_name
+        request = container_v1.GetClusterRequest(name=name)
+        try:
+            return self.client.get_cluster(request=request)
+        except NotFound:
+            pass
+
+    @timed
+    def create_cluster_nodes(
+        self, name, node_count, machine_type=None, spot=False, labels=None
+    ):
+        """
+        Create a node pool to add to the cluster.
+
+        https://github.com/googleapis/google-cloud-python/blob/min/
+        packages/google-cloud-container/google/cloud/container_v1/
+        services/cluster_manager/client.py#L3131
+        """
+        machine_type = self.machine_type or machine_type
+        node_config = self.get_node_config(machine_type, spot=spot, labels=labels)
+
+        # The min/max node counts are provided with the NodePoolAutoscaling
+        # For now we assume min == max for a constant number of nodes
+        autoscaling = container_v1.NodePoolAutoscaling(
+            enabled=True,
+            min_node_count=node_count,
+            max_node_count=node_count,
+        )
+        node_pool = container_v1.types.NodePool(
+            name=name,
+            config=node_config,
+            initial_node_count=node_count,
+            autoscaling=autoscaling,
+            # not specifying network_config uses cluster defaults
+            # Note that we can define placement_policy
+            # (google.cloud.container_v1.types.NodePool.PlacementPolicy)
+        )
+        request = container_v1.CreateNodePoolRequest(
+            parent=self.cluster_name,
+            node_pool=node_pool,
+        )
+        response = self.client.create_node_pool(request=request)
+        print(response)
+        print(f"⏱️   Waiting for node pool {name} to be ready...")
+        return self.wait_for_status(2)
+
+    def delete_nodegroup(self, name=None):
+        """
+        Delete a named node group.
+        """
+        node_pool = name or self.default_pool
+        request = container_v1.DeleteNodePoolRequest(
+            parent=self.cluster_name,
+            node_pool=node_pool,
+        )
+        # Make the request
+        return self.client.delete_node_pool(request=request)
+
+    def get_cluster(self, node_pools=None):
         """
         Get the cluster proto with our defaults
         """
         # Design our initial cluster!
-        # https://github.com/googleapis/python-container/blob/main/google/cloud/container_v1/types/cluster_service.py#LL2119C1-L2124C1
-
-        # Command for comparison
-        # TODO I don't see where dataplane is, or cloud dns, can add later!
-        # gcloud container clusters create flux-cluster \
-        #   --region=us-central1-a --project $GOOGLE_PROJECT \
-        #   --machine-type c2d-standard-112 --num-nodes=32 \
-        #   --cluster-dns=clouddns --cluster-dns-scope=cluster \
-        #   --tags=flux-cluster  --enable-dataplane-v2 \
-        #   --threads-per-core=1
-        # Note: we can add node_config for customizing node pools further
-
-        # TODO these look useful / interesting
-        # autoscaling (google.cloud.container_v1.types.ClusterAutoscaling):
-        #  Cluster-level autoscaling configuration.
-
         # Autoscaling - try optimizing
         # PROFILE_UNSPECIFIED = 0
         # OPTIMIZE_UTILIZATION = 1
         # BALANCED = 2
         autoscaling_profile = container_v1.ClusterAutoscaling.AutoscalingProfile(1)
 
-        # These are hard coded for c2-standard-8
+        # These are required, you get an error without them.
         # https://cloud.google.com/compute/docs/compute-optimized-machines
         resource_limits = [
             container_v1.ResourceLimit(
                 resource_type="cpu",
-                minimum=self.machine_type_vcpu,
-                maximum=self.machine_type_vcpu * self.max_nodes,
+                minimum=0,
+                maximum=self.max_vcpu * self.node_count,
             ),
             container_v1.ResourceLimit(
                 resource_type="memory",
-                minimum=self.machine_type_memory_gb,
-                maximum=self.machine_type_memory_gb * self.max_nodes,
+                minimum=0,
+                maximum=self.max_memory * self.node_count,
             ),
         ]
+
+        # Note that I removed resource_limits, no limits!
         cluster_autoscaling = container_v1.ClusterAutoscaling(
             enable_node_autoprovisioning=True,
             autoprovisioning_locations=[self.zone],
@@ -249,10 +290,20 @@ class GKECluster(Cluster):
         cluster = container_v1.Cluster(
             name=self.name,
             description=self.description,
-            initial_node_count=self.node_count,
-            node_config=self.node_config,
             autoscaling=cluster_autoscaling,
         )
+
+        # We can either provide our own node pools, or a node count and initial size
+        # Keep in mind this doesn't allow setting a min or max!
+        if node_pools is not None:
+            cluster.node_pools = node_pools
+        else:
+            node_config = self.get_node_config(
+                self.machine_type, spot=self.spot, labels=self.labels
+            )
+            cluster.initial_node_count = self.node_count
+            cluster.node_config = node_config
+
         print("\n🥣️ cluster spec")
         print(cluster)
         return cluster
@@ -261,13 +312,40 @@ class GKECluster(Cluster):
     def create_cluster(self):
         """
         Create a cluster, with hard coded variables for now.
+
+        Since we can't create an empty cluster, and the API doesn't allow you
+        to create one from scratch setting a min/max count, what we are going
+        to do is create the NodePool (with our preferences) first, and then
+        give it to the new cluster.
         """
-        # https://github.com/googleapis/python-container/blob/main/google/cloud/container_v1/types/cluster_service.py#L3527
-        request = container_v1.CreateClusterRequest(
-            parent=f"projects/{self.project}/locations/{self.region}",
-            cluster=self.cluster,
+        node_config = self.get_node_config(
+            self.machine_type, spot=self.spot, labels=self.labels
         )
 
+        # If you don't set this, your cluster will grow as it pleases.
+        autoscaling = container_v1.NodePoolAutoscaling(
+            enabled=True,
+            min_node_count=self.min_nodes,
+            max_node_count=self.max_nodes,
+        )
+        node_pool = container_v1.types.NodePool(
+            name=self.default_pool,
+            config=node_config,
+            initial_node_count=self.node_count,
+            autoscaling=autoscaling,
+            # not specifying network_config uses cluster defaults
+            # Note that we can define placement_policy
+            # (google.cloud.container_v1.types.NodePool.PlacementPolicy)
+        )
+
+        # Get a cluster with the given node pool
+        cluster = self.get_cluster([node_pool])
+
+        # https://github.com/googleapis/google-cloud-python/blob/461c76bbc6bd7cda3ef6da0a0ec7e2418c1532aa/packages/google-cloud-container/google/cloud/container_v1/services/cluster_manager/client.py#L708
+        request = container_v1.CreateClusterRequest(
+            parent=f"projects/{self.project}/locations/{self.region}",
+            cluster=cluster,
+        )
         print("\n🥣️ cluster creation request")
         print(request)
 
