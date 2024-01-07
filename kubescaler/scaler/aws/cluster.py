@@ -306,6 +306,24 @@ class EKSCluster(Cluster):
             token["status"]["expirationTimestamp"], "%Y-%m-%dT%H:%M:%SZ"
         )
 
+    def waiter_wait_for_nodes(self, nodegroup_name):
+        """
+        Use the "waiter" provided by eks to wait for nodes.
+
+        It is not recommended to use this function as it is flaky.
+        We are keeping it here to preserve the code to try again,
+        as perhaps the flakiness might improve!
+        """
+        try:
+            print(f"Waiting for {nodegroup_name} nodegroup...")
+            waiter = self.eks.get_waiter("nodegroup_active")
+            # MaxAttempts defaults to 120, and Delay 30 seconds
+            waiter.wait(clusterName=self.cluster_name, nodegroupName=nodegroup_name)
+        except Exception as e:
+            # Allow waiting 3 more minutes
+            print(f"Waiting for nodegroup creation exceeded wait time: {e}")
+            time.sleep(180)
+
     @timed
     def wait_for_nodes(self):
         """
@@ -331,10 +349,9 @@ class EKSCluster(Cluster):
             if ready_count >= self.node_count:
                 break
         print(f"Time for kubernetes to get nodes - {time.time()-start}")
-        return ready_count
         # The waiter doesn't seem to work - so we call kubectl until it's ready
-        # waiter = self.eks.get_waiter("nodegroup_active")
-        # waiter.wait(clusterName=self.cluster_name, nodegroupName=self.node_autoscaling_group_name)
+        # self.waiter_wait_for_nodes(self.node_autoscaling_group_name)
+        return ready_count
 
     @timed
     def watch_for_nodes_in_k8s(self, count):
@@ -781,6 +798,7 @@ class EKSCluster(Cluster):
             raise ValueError("Could not create nodegroup")
 
         # DO NOT USE THE WAITER, it is buggy and does not work.
+        # self.waiter_wait_for_nodes(nodegroup_name)
         self.wait_for_nodes()
 
         # Retrieve the same metadata if we had retrieved it
