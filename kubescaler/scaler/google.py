@@ -33,6 +33,7 @@ class GKECluster(Cluster):
         self,
         project,
         default_pool_name="default-pool",
+        # Set the zone for a more scoped request
         zone="us-central1-a",
         spot=False,
         max_vcpu=8,
@@ -83,6 +84,7 @@ class GKECluster(Cluster):
             "name": self.name,
             "machine_type": self.machine_type,
             "region": self.region,
+            "zone": self.zone,
             "tags": self.tags,
             "description": self.description,
         }
@@ -201,7 +203,15 @@ class GKECluster(Cluster):
 
     @timed
     def create_cluster_nodes(
-        self, name, node_count, machine_type=None, spot=False, labels=None
+        self,
+        name,
+        node_count,
+        machine_type=None,
+        spot=False,
+        labels=None,
+        threads_per_core=None,
+        placement_policy=None,
+        tier_1=False,
     ):
         """
         Create a node pool to add to the cluster.
@@ -210,7 +220,7 @@ class GKECluster(Cluster):
         packages/google-cloud-container/google/cloud/container_v1/
         services/cluster_manager/client.py#L3131
         """
-        machine_type = self.machine_type or machine_type
+        machine_type = machine_type or self.machine_type
         node_config = self.get_node_config(machine_type, spot=spot, labels=labels)
 
         # The min/max node counts are provided with the NodePoolAutoscaling
@@ -220,35 +230,81 @@ class GKECluster(Cluster):
             min_node_count=node_count,
             max_node_count=node_count,
         )
+
         node_pool = container_v1.types.NodePool(
             name=name,
             config=node_config,
             initial_node_count=node_count,
             autoscaling=autoscaling,
             # not specifying network_config uses cluster defaults
-            # Note that we can define placement_policy
-            # (google.cloud.container_v1.types.NodePool.PlacementPolicy)
         )
+
+        # Do we want tier_1 network (expensive)?
+        if tier_1:
+            tier_1_config = (
+                container_v1.types.NodeNetworkConfig.NetworkPerformanceConfig(
+                    total_egress_bandwidth_tier=1
+                )
+            )
+            network_config = container_v1.types.NodeNetworkConfig(
+                network_performance_config=tier_1_config
+            )
+            node_pool.network_config = network_config
+
+        # Do we want a placement policy?
+        if placement_policy is not None:
+            policy = container_v1.types.NodePool.PlacementPolicy(type=placement_policy)
+            node_pool.placement_policy = policy
+
+        # Do we want to set threads per core (yes, probably)
+        if threads_per_core is not None:
+            features = container_v1.types.AdvancedMachineFeatures(
+                threads_per_core=threads_per_core
+            )
+            node_pool.config.advanced_machine_features = features
+
         request = container_v1.CreateNodePoolRequest(
             parent=self.cluster_name,
             node_pool=node_pool,
         )
-        response = self.client.create_node_pool(request=request)
+
+        # Most instances don't allow COMPACT
+        try:
+            response = self.client.create_node_pool(request=request)
+        except Exception as e:
+            if placement_policy is not None:
+                return self.create_cluster_nodes(
+                    name=name,
+                    node_count=node_count,
+                    machine_type=machine_type,
+                    spot=spot,
+                    labels=labels,
+                    threads_per_core=threads_per_core,
+                    tier_1=tier_1,
+                )
+            raise (e)
+
         print(response)
         print(f"⏱️   Waiting for node pool {name} to be ready...")
         return self.wait_for_status(2)
+
+    @property
+    def location(self):
+        """
+        Return the preferred location. If you ask for resources for a region,
+        you often get the N amount in each ZONE which is not desired.
+        """
+        return self.zone or self.region
 
     def delete_nodegroup(self, name=None):
         """
         Delete a named node group.
         """
         node_pool = name or self.default_pool
-        request = container_v1.DeleteNodePoolRequest(
-            parent=self.cluster_name,
-            node_pool=node_pool,
-        )
-        # Make the request
-        return self.client.delete_node_pool(request=request)
+        name = f"{self.cluster_name}/nodePools/{node_pool}"
+        request = container_v1.DeleteNodePoolRequest(name=name)
+        self.client.delete_node_pool(request=request)
+        return self.wait_for_status(2)
 
     def get_cluster(self, node_pools=None):
         """
@@ -343,7 +399,7 @@ class GKECluster(Cluster):
 
         # https://github.com/googleapis/google-cloud-python/blob/461c76bbc6bd7cda3ef6da0a0ec7e2418c1532aa/packages/google-cloud-container/google/cloud/container_v1/services/cluster_manager/client.py#L708
         request = container_v1.CreateClusterRequest(
-            parent=f"projects/{self.project}/locations/{self.region}",
+            parent=f"projects/{self.project}/locations/{self.location}",
             cluster=cluster,
         )
         print("\n🥣️ cluster creation request")
@@ -359,7 +415,7 @@ class GKECluster(Cluster):
 
     @property
     def cluster_name(self):
-        return f"projects/{self.project}/locations/{self.region}/clusters/{self.name}"
+        return f"projects/{self.project}/locations/{self.location}/clusters/{self.name}"
 
     def wait_for_delete(self):
         """
