@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: (MIT)
 
-__version__ = "0.0.18"
+__version__ = "0.0.19"
 AUTHOR = "Vanessa Sochat"
 EMAIL = "vsoch@users.noreply.github.com"
 NAME = "kubescaler"
