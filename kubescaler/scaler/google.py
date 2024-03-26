@@ -296,6 +296,7 @@ class GKECluster(Cluster):
         """
         return self.zone or self.region
 
+    @timed
     def delete_nodegroup(self, name=None):
         """
         Delete a named node group.
