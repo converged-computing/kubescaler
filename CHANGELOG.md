@@ -14,6 +14,7 @@ and **Merged pull requests**. Critical items to know are:
 The versions coincide with releases on pip. Only major versions will be released as tags on Github.
 
 ## [0.0.x](https://github.com/converged-computing/kubescaler/tree/main) (0.0.x)
+ - ensure we do not add size for node scaling up/down times (0.0.19)
  - do not use the waiter for nodegroup_active it does not work! (0.0.18)
    - support for Google Cloud instance group creation, etc.
  - support adding one-off node groups to a cluster (0.0.17)
