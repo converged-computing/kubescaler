@@ -318,7 +318,9 @@ class GKECluster(Cluster):
         # PROFILE_UNSPECIFIED = 0
         # OPTIMIZE_UTILIZATION = 1
         # BALANCED = 2
-        autoscaling_profile = container_v1.ClusterAutoscaling.AutoscalingProfile(scaling_profile)
+        autoscaling_profile = container_v1.ClusterAutoscaling.AutoscalingProfile(
+            scaling_profile
+        )
 
         # These are required, you get an error without them.
         # https://cloud.google.com/compute/docs/compute-optimized-machines
