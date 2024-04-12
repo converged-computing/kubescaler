@@ -307,16 +307,18 @@ class GKECluster(Cluster):
         self.client.delete_node_pool(request=request)
         return self.wait_for_status(2)
 
-    def get_cluster(self, node_pools=None):
+    def get_cluster(self, node_pools=None, scaling_profile=1):
         """
         Get the cluster proto with our defaults
         """
+        if scaling_profile not in [0, 1, 2]:
+            raise ValueError("Scaling profile must be one of 0,1,2")
         # Design our initial cluster!
         # Autoscaling - try optimizing
         # PROFILE_UNSPECIFIED = 0
         # OPTIMIZE_UTILIZATION = 1
         # BALANCED = 2
-        autoscaling_profile = container_v1.ClusterAutoscaling.AutoscalingProfile(1)
+        autoscaling_profile = container_v1.ClusterAutoscaling.AutoscalingProfile(scaling_profile)
 
         # These are required, you get an error without them.
         # https://cloud.google.com/compute/docs/compute-optimized-machines
