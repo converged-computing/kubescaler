@@ -40,6 +40,7 @@ class GKECluster(Cluster):
         max_memory=32,
         # Initial labels for the default cluster
         labels=None,
+        scaling_profile=1,
         **kwargs,
     ):
         """
@@ -56,6 +57,7 @@ class GKECluster(Cluster):
         self.tags = self.tags or ["kubescaler-cluster"]
         self.default_pool = default_pool_name
         self.configuration = None
+        self.scaling_profile = scaling_profile
         self.labels = labels
         self.zone = zone
         self.max_vcpu = max_vcpu
@@ -307,12 +309,24 @@ class GKECluster(Cluster):
         self.client.delete_node_pool(request=request)
         return self.wait_for_status(2)
 
-    def get_cluster(self, node_pools=None, scaling_profile=1):
+    def get_cluster(self, node_pools=None, scaling_profile=None):
         """
         Get the cluster proto with our defaults
         """
+        if scaling_profile is None:
+            scaling_profile = self.scaling_profile
         if scaling_profile not in [0, 1, 2]:
             raise ValueError("Scaling profile must be one of 0,1,2")
+
+        # autoprovisioning node defaults. Note that upgrade settings
+        # default to a surge strategy, max surge 1 and nodes unavailable 2
+        node_defaults = container_v1.AutoprovisioningNodePoolDefaults(
+            management=container_v1.types.NodeManagement(
+                auto_upgrade=False,
+                auto_repair=False,
+            )
+        )
+
         # Design our initial cluster!
         # Autoscaling - try optimizing
         # PROFILE_UNSPECIFIED = 0
@@ -337,12 +351,12 @@ class GKECluster(Cluster):
             ),
         ]
 
-        # Note that I removed resource_limits, no limits!
         cluster_autoscaling = container_v1.ClusterAutoscaling(
             enable_node_autoprovisioning=True,
             autoprovisioning_locations=[self.zone],
             autoscaling_profile=autoscaling_profile,
             resource_limits=resource_limits,
+            autoprovisioning_node_pool_defaults=node_defaults,
         )
 
         # vertical_pod_autoscaling (google.cloud.container_v1.types.VerticalPodAutoscaling):
