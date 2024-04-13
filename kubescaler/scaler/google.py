@@ -40,7 +40,7 @@ class GKECluster(Cluster):
         max_memory=32,
         # Initial labels for the default cluster
         labels=None,
-        scaling_profile=1,
+        scaling_profile=0,
         **kwargs,
     ):
         """
@@ -320,12 +320,8 @@ class GKECluster(Cluster):
 
         # autoprovisioning node defaults. Note that upgrade settings
         # default to a surge strategy, max surge 1 and nodes unavailable 2
-        node_defaults = container_v1.AutoprovisioningNodePoolDefaults(
-            management=container_v1.types.NodeManagement(
-                auto_upgrade=False,
-                auto_repair=False,
-            )
-        )
+        # I tried setting auto_upgrade and auto_repair to False but that
+        # must be the default, they don't show up
 
         # Design our initial cluster!
         # Autoscaling - try optimizing
@@ -336,27 +332,31 @@ class GKECluster(Cluster):
             scaling_profile
         )
 
-        # These are required, you get an error without them.
+        # These are only intended if you want GKE to make new node pools for you
+        # I highly do not recommend this, I've never had this result in desired
+        # behavior.
         # https://cloud.google.com/compute/docs/compute-optimized-machines
-        resource_limits = [
-            container_v1.ResourceLimit(
-                resource_type="cpu",
-                minimum=0,
-                maximum=self.max_vcpu * self.node_count,
-            ),
-            container_v1.ResourceLimit(
-                resource_type="memory",
-                minimum=0,
-                maximum=self.max_memory * self.node_count,
-            ),
-        ]
+        # resource_limits = [
+        #    container_v1.ResourceLimit(
+        #        resource_type="cpu",
+        #        minimum=0,
+        #        maximum=self.max_vcpu * self.node_count,
+        #    ),
+        #    container_v1.ResourceLimit(
+        #        resource_type="memory",
+        #        minimum=0,
+        #        maximum=self.max_memory * self.node_count,
+        #    ),
+        # ]
 
+        # When autoprovisioning is enabled the cluster explodes into much
+        # larger sizes than you want.
         cluster_autoscaling = container_v1.ClusterAutoscaling(
-            enable_node_autoprovisioning=True,
-            autoprovisioning_locations=[self.zone],
+            enable_node_autoprovisioning=False,
             autoscaling_profile=autoscaling_profile,
-            resource_limits=resource_limits,
-            autoprovisioning_node_pool_defaults=node_defaults,
+            # These two fields are only for node autoprovisioning
+            # autoprovisioning_locations=[self.location],
+            # resource_limits=resource_limits,
         )
 
         # vertical_pod_autoscaling (google.cloud.container_v1.types.VerticalPodAutoscaling):
@@ -400,8 +400,8 @@ class GKECluster(Cluster):
         # If you don't set this, your cluster will grow as it pleases.
         autoscaling = container_v1.NodePoolAutoscaling(
             enabled=True,
-            min_node_count=self.min_nodes,
-            max_node_count=self.max_nodes,
+            total_max_node_count=self.max_nodes,
+            total_min_node_count=self.min_nodes,
         )
         node_pool = container_v1.types.NodePool(
             name=self.default_pool,
