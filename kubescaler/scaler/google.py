@@ -40,6 +40,7 @@ class GKECluster(Cluster):
         max_memory=32,
         # Initial labels for the default cluster
         labels=None,
+        scaling_profile=0,
         **kwargs,
     ):
         """
@@ -56,6 +57,7 @@ class GKECluster(Cluster):
         self.tags = self.tags or ["kubescaler-cluster"]
         self.default_pool = default_pool_name
         self.configuration = None
+        self.scaling_profile = scaling_profile
         self.labels = labels
         self.zone = zone
         self.max_vcpu = max_vcpu
@@ -307,38 +309,54 @@ class GKECluster(Cluster):
         self.client.delete_node_pool(request=request)
         return self.wait_for_status(2)
 
-    def get_cluster(self, node_pools=None):
+    def get_cluster(self, node_pools=None, scaling_profile=None):
         """
         Get the cluster proto with our defaults
         """
+        if scaling_profile is None:
+            scaling_profile = self.scaling_profile
+        if scaling_profile not in [0, 1, 2]:
+            raise ValueError("Scaling profile must be one of 0,1,2")
+
+        # autoprovisioning node defaults. Note that upgrade settings
+        # default to a surge strategy, max surge 1 and nodes unavailable 2
+        # I tried setting auto_upgrade and auto_repair to False but that
+        # must be the default, they don't show up
+
         # Design our initial cluster!
         # Autoscaling - try optimizing
         # PROFILE_UNSPECIFIED = 0
         # OPTIMIZE_UTILIZATION = 1
         # BALANCED = 2
-        autoscaling_profile = container_v1.ClusterAutoscaling.AutoscalingProfile(1)
+        autoscaling_profile = container_v1.ClusterAutoscaling.AutoscalingProfile(
+            scaling_profile
+        )
 
-        # These are required, you get an error without them.
+        # These are only intended if you want GKE to make new node pools for you
+        # I highly do not recommend this, I've never had this result in desired
+        # behavior.
         # https://cloud.google.com/compute/docs/compute-optimized-machines
-        resource_limits = [
-            container_v1.ResourceLimit(
-                resource_type="cpu",
-                minimum=0,
-                maximum=self.max_vcpu * self.node_count,
-            ),
-            container_v1.ResourceLimit(
-                resource_type="memory",
-                minimum=0,
-                maximum=self.max_memory * self.node_count,
-            ),
-        ]
+        # resource_limits = [
+        #    container_v1.ResourceLimit(
+        #        resource_type="cpu",
+        #        minimum=0,
+        #        maximum=self.max_vcpu * self.node_count,
+        #    ),
+        #    container_v1.ResourceLimit(
+        #        resource_type="memory",
+        #        minimum=0,
+        #        maximum=self.max_memory * self.node_count,
+        #    ),
+        # ]
 
-        # Note that I removed resource_limits, no limits!
+        # When autoprovisioning is enabled the cluster explodes into much
+        # larger sizes than you want.
         cluster_autoscaling = container_v1.ClusterAutoscaling(
-            enable_node_autoprovisioning=True,
-            autoprovisioning_locations=[self.zone],
+            enable_node_autoprovisioning=False,
             autoscaling_profile=autoscaling_profile,
-            resource_limits=resource_limits,
+            # These two fields are only for node autoprovisioning
+            # autoprovisioning_locations=[self.location],
+            # resource_limits=resource_limits,
         )
 
         # vertical_pod_autoscaling (google.cloud.container_v1.types.VerticalPodAutoscaling):
@@ -366,6 +384,30 @@ class GKECluster(Cluster):
         return cluster
 
     @timed
+    def update_cluster(self, size, max_nodes, min_nodes):
+        """
+        Update a cluster. Currently we support the max and min size
+        """
+        autoscaling = container_v1.NodePoolAutoscaling(
+            enabled=True,
+            total_max_node_count=max_nodes,
+            total_min_node_count=min_nodes,
+        )
+        request = container_v1.SetNodePoolAutoscalingRequest(
+            autoscaling=autoscaling,
+            name=f"projects/{self.project}/locations/{self.location}/clusters/{self.name}/nodePools/{self.default_pool}",
+        )
+        print("\n🥣️ cluster node pool update request")
+        print(request)
+
+        response = self.client.set_node_pool_autoscaling(request=request)
+        print(response)
+
+        # Status 2 is running (1 is provisioning)
+        print(f"⏱️   Waiting for {self.cluster_name} to be ready...")
+        return self.wait_for_status(2)
+
+    @timed
     def create_cluster(self):
         """
         Create a cluster, with hard coded variables for now.
@@ -382,8 +424,8 @@ class GKECluster(Cluster):
         # If you don't set this, your cluster will grow as it pleases.
         autoscaling = container_v1.NodePoolAutoscaling(
             enabled=True,
-            min_node_count=self.min_nodes,
-            max_node_count=self.max_nodes,
+            total_max_node_count=self.max_nodes,
+            total_min_node_count=self.min_nodes,
         )
         node_pool = container_v1.types.NodePool(
             name=self.default_pool,
