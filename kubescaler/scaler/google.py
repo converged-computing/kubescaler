@@ -384,6 +384,30 @@ class GKECluster(Cluster):
         return cluster
 
     @timed
+    def update_cluster(self, size, max_nodes, min_nodes):
+        """
+        Update a cluster. Currently we support the max and min size
+        """
+        autoscaling = container_v1.NodePoolAutoscaling(
+            enabled=True,
+            total_max_node_count=max_nodes,
+            total_min_node_count=min_nodes,
+        )
+        request = container_v1.SetNodePoolAutoscalingRequest(
+            autoscaling=autoscaling,
+            name=f"projects/{self.project}/locations/{self.location}/clusters/{self.name}/nodePools/{self.default_pool}",
+        )
+        print("\n🥣️ cluster node pool update request")
+        print(request)
+
+        response = self.client.set_node_pool_autoscaling(request=request)
+        print(response)
+
+        # Status 2 is running (1 is provisioning)
+        print(f"⏱️   Waiting for {self.cluster_name} to be ready...")
+        return self.wait_for_status(2)
+
+    @timed
     def create_cluster(self):
         """
         Create a cluster, with hard coded variables for now.
